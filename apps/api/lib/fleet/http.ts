@@ -2,8 +2,10 @@ import { isServable, type CapabilityId, type RegistryApp } from '@resolve/contra
 import { problem } from '../http';
 import { requireCapability, type Principal } from '../auth/session';
 import { registry, registryApp, RegistryUnavailable } from '../registry';
+import { pool } from '../db';
 import { tenantHealth } from '../tenants/protocol';
 import type { ToolFailure } from '../tenants/mcp';
+import { writeAudit } from '../audit';
 
 export const registryUnavailable = () => problem(503, 'REGISTRY_UNAVAILABLE', 'The application registry is unavailable. Try again shortly.');
 
@@ -18,19 +20,29 @@ export async function fleetRequest(request: Request, capability: CapabilityId): 
  try { return { principal, apps: (await registry()).apps }; } catch (e) { if (e instanceof RegistryUnavailable) return registryUnavailable(); throw e; }
 }
 
-/** A single-app request is an explicit user action, so a dormant app may be contacted. */
-export async function appRequest(request: Request, capability: CapabilityId, appKey: string): Promise<{ principal: Principal; app: RegistryApp } | Response> {
+/**
+ * A single-app request is an explicit user action, so a dormant app may be contacted. `auditAs` names the
+ * operation, so requests that stop here (unknown, unavailable or incompatible app) are audited too.
+ */
+export async function appRequest(request: Request, capability: CapabilityId, appKey: string, auditAs: string): Promise<{ principal: Principal; app: RegistryApp } | Response> {
  const principal = await requireCapability(request, capability);
  if (principal instanceof Response) return principal;
+ const fail = async (status: number, code: string, message: string) => {
+  await writeAudit(pool(), { actorUserId: principal.userId, operation: auditAs, outcome: 'failed', summary: { app: appKey, code } });
+  return problem(status, code, message);
+ };
  let app: RegistryApp | undefined;
- try { app = await registryApp(appKey); } catch (e) { if (e instanceof RegistryUnavailable) return registryUnavailable(); throw e; }
- if (!app) return problem(404, 'UNKNOWN_APP', 'This application is not registered.');
- if (!isServable(app)) return problem(503, 'APP_UNAVAILABLE', `${app.displayName} is not available right now.`);
+ try { app = await registryApp(appKey); } catch (e) { if (e instanceof RegistryUnavailable) return fail(503, 'REGISTRY_UNAVAILABLE', 'The application registry is unavailable. Try again shortly.'); throw e; }
+ if (!app) return fail(404, 'UNKNOWN_APP', 'This application is not registered.');
+ if (!isServable(app)) return fail(503, 'APP_UNAVAILABLE', `${app.displayName} is not available right now.`);
  const health = await tenantHealth(app);
- if (health.status === 'incompatible') return problem(409, 'INCOMPATIBLE', `${app.displayName} runs a version Resolve cannot read yet.`);
- if (health.status === 'unreachable') return problem(502, 'TENANT_ERROR', `${app.displayName} did not respond. Try again shortly.`);
+ if (health.status === 'incompatible') return fail(409, 'INCOMPATIBLE', `${app.displayName} runs a version Resolve cannot read yet.`);
+ if (health.status === 'unreachable') return fail(502, 'TENANT_ERROR', `${app.displayName} did not respond. Try again shortly.`);
  return { principal, app };
 }
+
+/** Audit outcome for a read that reached the tenant. */
+export const readOutcome = (o: { ok: boolean; reason?: string }) => o.ok ? 'succeeded' as const : o.reason === 'denied' || o.reason === 'not_found' ? 'denied' as const : 'failed' as const;
 
 const FAILURES: Record<ToolFailure, [number, string]> = {
  not_connected: [409, 'Connect to this application first.'],

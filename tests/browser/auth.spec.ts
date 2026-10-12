@@ -22,7 +22,7 @@ test('agent signs in through the IdP and gets agent capabilities only', async ({
 test('admin can read the audit log, which records the sign-in', async ({ page }) => {
  await signInAs(page, 'Ada Admin');
  await expect(page.getByText('Roles: Fleet admin')).toBeVisible();
- const r = await page.request.get('/api/audit');
+ const r = await page.request.get('/api/audit?category=session');
  expect(r.status()).toBe(200);
  expect((await r.json()).events.some((e: { operation: string; actor: string; outcome: string }) =>
   e.operation === 'session.login' && e.actor === 'Ada Admin' && e.outcome === 'succeeded')).toBe(true);

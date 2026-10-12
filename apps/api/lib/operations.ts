@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { canonicalJson, type ActionTool, type Operation, type OperationState, type RegistryApp } from '@resolve/contracts';
 import { transaction, type Queryable } from './db';
+import { writeAudit } from './audit';
+import type { Sealer } from './crypto';
 import { rpc, type RpcOutcome } from './tenants/mcp';
 
 /*
@@ -22,7 +24,9 @@ export interface ActionSpec {
  targetId: string;
  args: Record<string, unknown>; // tool arguments (operationKey is added for keyed tools)
  keyed: boolean;
- summary: Record<string, string | number | boolean | null>; // redacted: never message content
+ summary: Record<string, string | number | boolean | null>;
+ /** Message text, audited in full (sealed) on the operation's first transition. */
+ content?: string;
 }
 
 interface Row {
@@ -36,9 +40,10 @@ export class OperationConflict extends Error {}
 const hashOf = (spec: ActionSpec) => createHash('sha256').update(canonicalJson({ op: spec.operation, target: spec.targetId, args: spec.args })).digest('hex');
 const AUDIT_OUTCOME: Record<OperationState, string> = { pending: 'pending', succeeded: 'succeeded', failed: 'failed', uncertain: 'uncertain', denied: 'denied' };
 
-async function transition(db: Queryable, row: Pick<Row, 'id' | 'user_id' | 'app_key' | 'operation' | 'target_id'>, state: OperationState, code: string | null, extra: Record<string, unknown> = {}) {
- await db.query(`INSERT INTO audit_events (operation_id, actor_user_id, operation, outcome, summary) VALUES ($1, $2, $3, $4, $5)`,
-  [row.id, row.user_id, row.operation, AUDIT_OUTCOME[state], JSON.stringify({ app: row.app_key, target: row.target_id, ...(code ? { code } : {}), ...extra })]);
+async function transition(db: Queryable, row: Pick<Row, 'id' | 'user_id' | 'app_key' | 'operation' | 'target_id'>, state: OperationState, code: string | null,
+ extra: Record<string, string | number | boolean | null> = {}, content?: string, seal?: Sealer) {
+ await writeAudit(db, { operationId: row.id, actorUserId: row.user_id, operation: row.operation, outcome: AUDIT_OUTCOME[state] as never,
+  summary: { app: row.app_key, target: row.target_id, ...(code ? { code } : {}), ...extra }, content }, seal);
 }
 
 export function toApi(row: Row, keyed: boolean): Operation {
@@ -55,14 +60,14 @@ export function toApi(row: Row, keyed: boolean): Operation {
 export const KEYED_OPERATIONS = new Set(['conversation.reply', 'conversation.note', 'ticket.reply', 'ticket.note']);
 
 /** Record the intent, or return the existing operation for a repeated id (same user, same payload). */
-export async function beginOperation(db: Pick<Pool, 'connect'>, id: string, userId: string, appKey: string, spec: ActionSpec): Promise<{ row: Row; created: boolean }> {
+export async function beginOperation(db: Pick<Pool, 'connect'>, id: string, userId: string, appKey: string, spec: ActionSpec, seal?: Sealer): Promise<{ row: Row; created: boolean }> {
  const payloadHash = hashOf(spec);
  return transaction(db, async tx => {
   const inserted = await tx.query(
    `INSERT INTO operations (id, user_id, app_key, operation, target_type, target_id, payload_hash, summary, state)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending') ON CONFLICT (id) DO NOTHING RETURNING *`,
    [id, userId, appKey, spec.operation, spec.targetType, spec.targetId, payloadHash, JSON.stringify(spec.summary)]);
-  if (inserted.rowCount) { await transition(tx, inserted.rows[0], 'pending', null, spec.summary); return { row: inserted.rows[0], created: true }; }
+  if (inserted.rowCount) { await transition(tx, inserted.rows[0], 'pending', null, spec.summary, spec.content, seal); return { row: inserted.rows[0], created: true }; }
   const existing = (await tx.query('SELECT * FROM operations WHERE id = $1 FOR UPDATE', [id])).rows[0] as Row;
   if (existing.user_id !== userId || existing.payload_hash !== payloadHash) throw new OperationConflict('This operation id was used for a different action');
   return { row: existing, created: false };
@@ -96,7 +101,7 @@ export async function dispatch(db: Pick<Pool, 'connect'> & Queryable, app: Regis
 }
 
 async function complete(db: Pick<Pool, 'connect'>, row: Pick<Row, 'id' | 'user_id' | 'app_key' | 'operation' | 'target_id'>, state: OperationState, code: string | null,
- record: string | null, result: Operation['result'], extra: Record<string, unknown> = {}): Promise<Row> {
+ record: string | null, result: Operation['result'], extra: Record<string, string | number | boolean | null> = {}): Promise<Row> {
  return transaction(db, async tx => {
   const updated = (await tx.query(
    `UPDATE operations SET state = $2, failure_code = $3, tenant_record_id = COALESCE($4, tenant_record_id), result = COALESCE($5, result),

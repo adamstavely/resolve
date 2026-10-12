@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { z } from 'zod';
 import { transaction, type Queryable } from './db';
+import { writeAudit } from './audit';
 
 /*
  * Directory observation ingestion (plan 02). The directory is authoritative for whether a person may use
@@ -30,8 +31,7 @@ async function record(tx: Queryable, source: string, issuer: string, subject: st
 }
 
 async function systemAudit(tx: Queryable, operation: string, userId: string, summary: Record<string, string | number | boolean>) {
- await tx.query(`INSERT INTO audit_events (operation_id, actor_user_id, operation, outcome, summary) VALUES (gen_random_uuid(), NULL, $1, 'succeeded', $2)`,
-  [operation, JSON.stringify({ executor: 'directory-sync', userId, ...summary })]);
+ await writeAudit(tx, { actorUserId: null, operation, outcome: 'succeeded', summary: { executor: 'directory-sync', userId, ...summary } });
 }
 
 export async function applyDirectorySnapshot(db: Pick<Pool, 'connect'>, issuer: string, source: string, snapshot: DirectorySnapshot) {

@@ -1,3 +1,4 @@
+import { crossOrigin } from '../../../../../lib/http';
 import { config } from '../../../../../lib/config';
 import { pool } from '../../../../../lib/db';
 import { sameOrigin } from '../../../../../lib/auth/policy';
@@ -10,7 +11,7 @@ export const dynamic = 'force-dynamic';
 
 /** Discard this user's tokens for one app. The identity link is kept so a reconnect must match it. */
 export async function POST(request: Request, ctx: { params: Promise<{ appKey: string }> }) {
- if (!sameOrigin(request.headers.get('origin'), config().RESOLVE_ORIGIN)) return apiError(403, 'CROSS_ORIGIN', 'Request origin is not allowed.');
+ if (!sameOrigin(request.headers.get('origin'), config().RESOLVE_ORIGIN)) return crossOrigin(request);
  const principal = await requireCapability(request, 'connection.manage');
  if (principal instanceof Response) return principal;
  const { appKey } = await ctx.params;

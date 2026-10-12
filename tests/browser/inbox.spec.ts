@@ -66,11 +66,13 @@ test('a reply is sent as the human, confirmed from the tenant, and correlated in
  const sent = detail.detail.messages.find((m: { content: string }) => m.content === text);
  expect(sent).toMatchObject({ authorName: 'Sam Agent', senderType: 'agent', isInternal: false });
  const ada = await signedIn(browser, 'Ada Admin');
- const audit = await (await ada.request.get('/api/audit?limit=100')).json();
+ const audit = await (await ada.request.get('/api/audit?category=conversation&limit=100')).json();
  const events = audit.events.filter((e: { operation: string; summary: { target?: string } }) => e.operation === 'conversation.reply' && e.summary.target === conversationId);
  expect(events.map((e: { outcome: string }) => e.outcome).sort()).toEqual(['pending', 'succeeded']);
  expect(events.find((e: { outcome: string }) => e.outcome === 'succeeded')).toMatchObject({ actor: 'Sam Agent', summary: { app: 'payroll', tenantRecord: sent.id } });
- expect(JSON.stringify(events)).not.toContain(text); // message content is never audited
+ // Owner decision: the audit records the text of messages sent (sealed at rest), on the operation's first transition.
+ expect(events.find((e: { outcome: string }) => e.outcome === 'pending').content).toBe(text);
+ expect(events.find((e: { outcome: string }) => e.outcome === 'succeeded').content).toBeNull();
  expect((await new AxeBuilder({ page: sam }).withTags(tags).analyze()).violations).toEqual([]);
  await sam.context().close(); await ada.context().close();
 });

@@ -5,6 +5,7 @@ import { registryApp } from '../../../../../lib/registry';
 import { sealer } from '../../../../../lib/sealer';
 import { accessToken, setGrantState } from '../../../../../lib/tenants/grants';
 import { refresher } from '../../../../../lib/tenants/oauth';
+import { auditRead } from '../../../../../lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,6 +18,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ appKey: str
  const principal = await requireCapability(request, 'connection.manage');
  if (principal instanceof Response) return principal;
  const { appKey } = await ctx.params;
+ await auditRead(principal, 'connection_check', { app: appKey });
  const app = await registryApp(appKey).catch(() => undefined);
  if (!app) return apiError(400, 'UNKNOWN_APP', 'This application is not registered.');
  if (!isServable(app)) return unavailable('APP_UNAVAILABLE', 'This application is not available right now.', 503);

@@ -34,7 +34,7 @@ export async function runAction<S extends z.ZodType>(request: Request, appKey: s
  build: (body: z.infer<S>, app: RegistryApp) => Omit<ActionSpec, 'tool' | 'keyed'>, operationId?: (body: z.infer<S>) => string) {
  const raw = await jsonMutation(request);
  if (raw instanceof Response) return raw;
- const ctx = await appRequest(request, capability, appKey);
+ const ctx = await appRequest(request, capability, appKey, `action.${tool}`);
  if (ctx instanceof Response) return ctx;
  if (!(await actionSupported(ctx.app, tool))) return problem(409, 'ACTION_UNAVAILABLE', `${ctx.app.displayName} does not support this action yet.`);
  const body = schema.safeParse(raw);

@@ -20,6 +20,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ appKey:
  const principal = await requireCapability(request, 'connection.manage');
  if (principal instanceof Response) return principal;
  const app = await registryApp(appKey).catch(() => undefined);
+ await audit(pool(), { actorUserId: principal.userId, operation: 'grant.connect_start', outcome: app && isServable(app) ? 'succeeded' : 'failed', summary: { app: appKey } });
  if (!app || !isServable(app)) return back('unavailable', appKey);
  let cfg: client.Configuration;
  try { cfg = await tenantOidc(app); } catch {

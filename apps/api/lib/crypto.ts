@@ -34,4 +34,5 @@ export const aad = {
  clientSecret: (appKey: string) => `tenant_client:${appKey}`,
  accessToken: (userId: string, appKey: string) => `grant:${userId}:${appKey}:access`,
  refreshToken: (userId: string, appKey: string) => `grant:${userId}:${appKey}:refresh`,
+ auditContent: (eventId: string) => `audit:${eventId}:content`,
 };

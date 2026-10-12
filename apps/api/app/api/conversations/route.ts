@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { json, problem } from '../../../lib/http';
 import { fanOut } from '../../../lib/fleet/fanout';
 import { fleetRequest, includeParam } from '../../../lib/fleet/http';
+import { auditRead } from '../../../lib/audit';
 import { callTenantTool } from '../../../lib/tenants/mcp';
 
 export const runtime = 'nodejs';
@@ -16,5 +17,7 @@ export async function GET(request: NextRequest) {
  if (ctx instanceof Response) return ctx;
  const q = filters.safeParse(Object.fromEntries(request.nextUrl.searchParams));
  if (!q.success) return problem(400, 'INVALID_QUERY', q.error.issues[0]?.message ?? 'Invalid query.');
- return json({ apps: await fanOut(ctx.apps, app => callTenantTool(app, ctx.principal.userId, 'list_conversations', { status: q.data.status, limit: 25 }), { include: includeParam(request.nextUrl) }) });
+ const apps = await fanOut(ctx.apps, app => callTenantTool(app, ctx.principal.userId, 'list_conversations', { status: q.data.status, limit: 25 }), { include: includeParam(request.nextUrl) });
+ await auditRead(ctx.principal, 'conversations', { status: q.data.status ?? null, appsRead: apps.filter(a => a.status === 'ok').length, appsUnavailable: apps.filter(a => a.status !== 'ok').length });
+ return json({ apps });
 }

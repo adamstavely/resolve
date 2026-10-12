@@ -77,8 +77,8 @@ test('an admin registers a tenant client; the secret is never returned or audite
  expect(await r.json()).toEqual({ appKey: 'hr', clientId: hr.id });
  expect((await ada.request.put('/api/admin/apps/unknown-app/client', { headers: json, data: JSON.stringify({ clientId: 'x', clientSecret: 'y'.repeat(20) }) })).status()).toBe(404);
  const audit = await (await ada.request.get('/api/audit?category=app')).text();
- expect((await ada.request.get('/api/audit?category=app')).status()).toBe(400); // only known categories
- const all = await (await ada.request.get('/api/audit?limit=100')).text();
+ expect((await ada.request.get('/api/audit?category=nonsense')).status()).toBe(400); // only known categories
+ const all = await (await ada.request.get('/api/audit?category=app&limit=100')).text();
  expect(all).toContain('app.client_register');
  expect(all + audit).not.toContain(hr.secret);
  // The re-registered client still works: connecting to HR succeeds.

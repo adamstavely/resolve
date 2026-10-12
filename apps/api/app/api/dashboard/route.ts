@@ -3,6 +3,7 @@ import { KPI_METRICS, sumMetric, type KpiMetric, type MetricValue } from '@resol
 import { json } from '../../../lib/http';
 import { fanOut } from '../../../lib/fleet/fanout';
 import { fleetRequest, includeParam } from '../../../lib/fleet/http';
+import { auditRead } from '../../../lib/audit';
 import { callTenantTool } from '../../../lib/tenants/mcp';
 
 export const runtime = 'nodejs';
@@ -32,6 +33,7 @@ export async function GET(request: NextRequest) {
  for (const t of Object.values(totals)) t.missing = t.missing.map(m => m.reason === 'app_unavailable' ? { ...m, reason: appReason.get(m.appKey) ?? m.reason } : m);
  const merged = activity.flatMap(r => r.status === 'ok' ? r.data.entries.map(e => ({ ...e, appKey: r.appKey })) : [])
   .sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id)).slice(0, 30);
+ await auditRead(ctx.principal, 'dashboard', { appsRead: kpis.filter(a => a.status === 'ok').length, appsUnavailable: kpis.filter(a => a.status !== 'ok').length, woke: [...include].join(',') || null });
  return json({
   apps: kpis, totals, activity: merged,
   activityApps: activity.map(r => r.status === 'ok' ? { ...r, data: { coverageSince: r.data.coverageSince, hasMore: r.data.nextCursor !== null } } : r),

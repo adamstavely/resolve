@@ -3,6 +3,7 @@ import { config } from '../config';
 import { pool } from '../db';
 import { capabilityList, readCookie, SESSION_COOKIE, sha256 } from './policy';
 import { findSession, type SessionUser } from './repository';
+import { auditDenied } from '../audit';
 
 export interface Principal extends SessionUser { capabilities: CapabilityId[]; sessionHash: string }
 
@@ -19,9 +20,10 @@ export function apiError(status: 401 | 403 | 400, code: string, message: string)
 }
 
 /** Server-side capability check (plan 02). The UI hiding a control is never the enforcement. */
+/** Every refusal is audited (owner decision: the audit covers every user event, including denied ones). */
 export async function requireCapability(request: Request, capability: CapabilityId): Promise<Principal | Response> {
  const principal = await currentPrincipal(request);
- if (!principal) return apiError(401, 'UNAUTHENTICATED', 'Sign in to continue.');
- if (!principal.capabilities.includes(capability)) return apiError(403, 'FORBIDDEN', 'You do not have access to this.');
+ if (!principal) { await auditDenied(request, null, 'unauthenticated', { capability }); return apiError(401, 'UNAUTHENTICATED', 'Sign in to continue.'); }
+ if (!principal.capabilities.includes(capability)) { await auditDenied(request, principal.userId, 'missing_capability', { capability }); return apiError(403, 'FORBIDDEN', 'You do not have access to this.'); }
  return principal;
 }

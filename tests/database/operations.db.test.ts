@@ -61,3 +61,19 @@ describe('operation intents', () => {
   expect(toApi({ ...base, state: 'denied', failure_code: 'FORBIDDEN' }, true).next).toBe('none');
  });
 });
+
+describe('audited message text', () => {
+ test('is sealed at rest, bound to its event, and opened only through the audit page', async () => {
+  const { localSealer, aad } = await import('../../apps/api/lib/crypto');
+  const { auditPage } = await import('../../apps/api/lib/admin');
+  const seal = localSealer(Buffer.alloc(32, 9).toString('base64'));
+  const user = await person(); const id = randomUUID();
+  await beginOperation(db, id, user, 'payroll', { ...reply('Your refund is on its way'), content: 'Your refund is on its way' }, seal);
+  const raw = (await db.query('SELECT id, content_enc FROM audit_events WHERE operation_id = $1', [id])).rows[0];
+  expect(raw.content_enc).not.toContain('refund');
+  expect(seal.open(raw.content_enc, aad.auditContent(raw.id))).toBe('Your refund is on its way');
+  expect(() => seal.open(raw.content_enc, aad.auditContent(randomUUID()))).toThrow();
+  const page = await auditPage(db, { category: 'conversation', limit: 50 }, seal);
+  expect(page.events.find(e => e.summary.target === 'c1' && e.content === 'Your refund is on its way')).toBeDefined();
+ });
+});

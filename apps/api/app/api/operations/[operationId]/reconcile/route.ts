@@ -19,7 +19,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ operationI
  const row = uuidSchema.safeParse(operationId).success ? await findOperation(pool(), operationId, principal.userId) : undefined;
  if (!row) return problem(404, 'NOT_FOUND', 'No such operation.');
  if (row.state !== 'uncertain' || !KEYED_OPERATIONS.has(row.operation)) return operationResponse(toApi(row, KEYED_OPERATIONS.has(row.operation)));
- const app = await appRequest(request, 'fleet.view', row.app_key);
+ const app = await appRequest(request, 'fleet.view', row.app_key, row.operation);
  if (app instanceof Response) return app;
  return operationResponse(toApi(await reconcile(pool(), app.app, row), true));
 }

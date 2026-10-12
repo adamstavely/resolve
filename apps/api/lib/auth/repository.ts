@@ -1,7 +1,7 @@
-import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { BundleId } from '@resolve/contracts';
 import { transaction, type Queryable } from '../db';
+import { writeAudit } from '../audit';
 
 /*
  * Identity, session and audit persistence. Every function takes its database handle so tests can run
@@ -108,6 +108,5 @@ export async function setUserEnabled(db: Pick<Pool, 'connect'>, userId: string, 
 }
 
 export async function audit(db: Queryable, e: { actorUserId: string | null; operation: string; outcome: 'succeeded' | 'failed' | 'denied'; summary?: Record<string, string | number | boolean | null> }) {
- await db.query('INSERT INTO audit_events (operation_id, actor_user_id, operation, outcome, summary) VALUES ($1, $2, $3, $4, $5)',
-  [randomUUID(), e.actorUserId, e.operation, e.outcome, JSON.stringify(e.summary ?? {})]);
+ await writeAudit(db, e);
 }

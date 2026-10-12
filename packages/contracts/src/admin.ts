@@ -30,7 +30,8 @@ export const tenantClientRegistrationSchema = z.strictObject({
  clientSecret: z.string().min(16).max(1000),
 });
 
-export const AUDIT_CATEGORIES = ['session', 'grant', 'user'] as const;
+/** Operation prefixes: sign-in, app connections, people, conversation and ticket actions, reads, refused requests, app admin. */
+export const AUDIT_CATEGORIES = ['session', 'grant', 'user', 'conversation', 'ticket', 'read', 'access', 'app'] as const;
 
 /** GET /api/audit query. `before` is the opaque cursor from the previous page. */
 export const auditQuerySchema = z.strictObject({
@@ -49,6 +50,8 @@ export const auditEventSchema = z.strictObject({
  actor: z.string(),
  actorType: z.enum(['human', 'system']),
  summary: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+ /** Full text of a reply or note, for audit readers only (owner decision). */
+ content: z.string().nullable(),
 });
 export const auditPageSchema = z.strictObject({ events: z.array(auditEventSchema), nextCursor: z.string().nullable() });
 export type AuditEvent = z.infer<typeof auditEventSchema>;

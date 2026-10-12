@@ -4,6 +4,7 @@ import { requireCapability } from '../../../lib/auth/session';
 import { registry, RegistryUnavailable } from '../../../lib/registry';
 import { grantsFor } from '../../../lib/tenants/grants';
 import { tenantHealth } from '../../../lib/tenants/protocol';
+import { auditRead } from '../../../lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,6 +18,7 @@ export async function GET(request: Request) {
   throw e;
  }
  const grants = await grantsFor(pool(), principal.userId);
+ await auditRead(principal, 'apps', { registryRevision: reg.revision });
  return Response.json({
   registryRevision: reg.revision,
   apps: await Promise.all(reg.apps.map(async a => {

@@ -8,6 +8,7 @@ import { registry } from '../../../../lib/registry';
 import { includeParam } from '../../../../lib/fleet/http';
 import { rpc } from '../../../../lib/tenants/mcp';
 import { actionSupported } from '../../../../lib/tenants/protocol';
+import { auditRead, writeAudit } from '../../../../lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,6 +32,7 @@ export async function GET(request: NextRequest) {
  const include = includeParam(request.nextUrl);
  const cursors = decode(request.headers.get('last-event-id') ?? request.nextUrl.searchParams.get('cursors'));
  const apps = (await registry()).apps;
+ await auditRead(principal, 'inbox_stream', { include: [...include].join(',') || null, resumed: Object.keys(cursors).length > 0 });
  const enc = new TextEncoder();
  const abort = new AbortController();
  request.signal.addEventListener('abort', () => abort.abort());
@@ -38,7 +40,7 @@ export async function GET(request: NextRequest) {
  const stream = new ReadableStream<Uint8Array>({
   async start(controller) {
    let closed = false;
-   const close = () => { if (!closed) { closed = true; abort.abort(); try { controller.close(); } catch { /* already closed */ } } };
+   const close = () => { if (!closed) { closed = true; void writeAudit(pool(), { actorUserId: principal.userId, operation: 'read.inbox_stream_end', outcome: 'succeeded' }).catch(() => {}); abort.abort(); try { controller.close(); } catch { /* already closed */ } } };
    abort.signal.addEventListener('abort', close);
    const send = (event: InboxEvent) => {
     if (closed) return;

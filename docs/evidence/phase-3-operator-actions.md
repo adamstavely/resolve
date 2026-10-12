@@ -7,7 +7,13 @@ and change-feed contracts (`packages/contracts/src/operations.ts`); the Quackbac
 
 - **Recorded actions** (`apps/api/lib/operations.ts`, migration 0004):
   - Every action is stored as an `operations` row before dispatch, and each state change is appended to `audit_events`.
-  - The audit holds the human, the app, the target, the tenant record id and a redacted summary. Message text is never stored.
+  - The audit holds the human, the app, the target and the tenant record id.
+- **Full audit coverage** (owner decision; `apps/api/lib/audit.ts`, migration 0005):
+  - Every read is audited (session, apps, dashboard, lists, opening a ticket or conversation, connection checks, stream start and end, audit and people searches).
+  - Every refusal is audited: unauthenticated, missing capability, cross-origin, and unavailable or incompatible apps.
+  - The full text of every reply and note is stored on the operation's first audit transition, sealed and bound to its event id.
+  - Audit readers see the text on the Audit page, which filters by conversation and ticket actions, reads, refused requests, sign-in, connections, access changes and app administration.
+  - Evidence: `tests/browser/audit.spec.ts`, `tests/database/operations.db.test.ts`.
 - **Write semantics:**
   - **Replies and notes** are keyed by a client-generated operation id, which is also the tenant operation key.
     Reusing an id with different content is refused, both in Resolve and in the tenant.
@@ -39,7 +45,7 @@ and change-feed contracts (`packages/contracts/src/operations.ts`); the Quackbac
 
 | Criterion | Evidence |
 |---|---|
-| Audit correlation to the human and the tenant record | `tests/browser/inbox.spec.ts` › a reply is sent as the human…: the tenant message names Sam, and the `pending` and `succeeded` audit rows carry the tenant record id with no message text. `tests/database/operations.db.test.ts` |
+| Audit correlation to the human and the tenant record | `tests/browser/inbox.spec.ts` › a reply is sent as the human…: the tenant message names Sam, the `pending` row carries the message text, and the `succeeded` row carries the tenant record id. `tests/database/operations.db.test.ts` |
 | Uncertain outcomes visible | inbox.spec › a lost response is shown as not confirmed… and › check result reconciles…: a fault-injected lost response shows "Not confirmed" |
 | No automatic retry of non-idempotent actions | The same tests show the tenant has exactly one copy after the lost response and still one after a user retry. `toApi` never offers an automatic retry |
 | Tenant permissions rechecked independently | inbox.spec › the tenant rechecks permissions…: Bo is an agent in Resolve but an observer in HR, and HR refuses his reply (`denied`, `FORBIDDEN`) |

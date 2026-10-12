@@ -1,6 +1,8 @@
 import type { Pool } from 'pg';
 import type { AdminUser, AuditEvent } from '@resolve/contracts';
 import { transaction, type Queryable } from './db';
+import { writeAudit } from './audit';
+import { aad, type Sealer } from './crypto';
 
 /*
  * Phase 1 administration primitives. Every change is audited with the acting admin and their reason, in the
@@ -45,9 +47,8 @@ export async function setManualAccess(db: Pick<Pool, 'connect'>, actorUserId: st
    await tx.query('UPDATE users SET enabled = true, disabled_reason = NULL, updated_at = now() WHERE id = $1', [targetUserId]);
    result = 'changed';
   } else result = row.enabled ? 'unchanged' : 'directory_disabled';
-  await tx.query(`INSERT INTO audit_events (operation_id, actor_user_id, operation, outcome, summary) VALUES (gen_random_uuid(), $1, $2, $3, $4)`,
-   [actorUserId, enabled ? 'user.manual_enable' : 'user.manual_disable', result === 'changed' || result === 'unchanged' ? 'succeeded' : 'denied',
-    JSON.stringify({ targetUserId, reason, result })]);
+  await writeAudit(tx, { actorUserId, operation: enabled ? 'user.manual_enable' : 'user.manual_disable',
+   outcome: result === 'changed' || result === 'unchanged' ? 'succeeded' : 'denied', summary: { targetUserId, reason, result } });
   return result;
  });
 }
@@ -61,9 +62,9 @@ export function decodeCursor(cursor: string): [string, string] | undefined {
  } catch { return undefined; }
 }
 
-export async function auditPage(db: Queryable, q: { category?: string; outcome?: string; limit: number; before?: [string, string] }) {
+export async function auditPage(db: Queryable, q: { category?: string; outcome?: string; limit: number; before?: [string, string] }, seal?: Sealer) {
  const rows = (await db.query(
-  `SELECT a.id, a.at, a.at::text AS at_exact, a.operation, a.outcome, a.summary, a.actor_user_id, u.display_name
+  `SELECT a.id, a.at, a.at::text AS at_exact, a.content_enc, a.operation, a.outcome, a.summary, a.actor_user_id, u.display_name
    FROM audit_events a LEFT JOIN users u ON u.id = a.actor_user_id
    WHERE ($1::text IS NULL OR a.operation LIKE $1 || '.%') AND ($2::text IS NULL OR a.outcome = $2)
      AND ($3::timestamptz IS NULL OR (a.at, a.id) < ($3::timestamptz, $4::uuid))
@@ -72,7 +73,8 @@ export async function auditPage(db: Queryable, q: { category?: string; outcome?:
  const page = rows.slice(0, q.limit);
  const events: AuditEvent[] = page.map(r => ({
   id: r.id, at: (r.at as Date).toISOString(), operation: r.operation, outcome: r.outcome,
-  actorType: r.actor_user_id ? 'human' : 'system', actor: r.display_name ?? String(r.summary?.executor ?? 'system'), summary: r.summary ?? {},
+  actorType: r.actor_user_id ? 'human' : 'system', actor: r.display_name ?? String(r.summary?.executor ?? (r.actor_user_id ? 'Unknown user' : 'system')), summary: r.summary ?? {},
+  content: r.content_enc && seal ? seal.open(r.content_enc, aad.auditContent(r.id)) : null,
  }));
  const last = page.at(-1);
  // The cursor keeps Postgres' microsecond timestamp text; a JS Date would truncate it and skip or repeat rows.
