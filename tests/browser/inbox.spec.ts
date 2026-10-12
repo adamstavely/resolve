@@ -218,7 +218,8 @@ test('blocking a person closes their live stream', async ({ browser }) => {
 test('ticket reply, assignment and confirmed resolution', async ({ browser }) => {
  const ada = await signedIn(browser, 'Ada Admin', ['payroll']);
  const list = await (await ada.request.get('/api/apps/payroll/tickets?statusCategory=open')).json();
- const ticket = list.tickets[0];
+ // An unidentified customer's ticket: closing it is allowed after the pre-flight check (an affected customer's warns; see receipts.spec).
+ const ticket = list.tickets.find((t: { requesterPrincipalId: string }) => ['principal_customer_7', 'principal_customer_8'].includes(t.requesterPrincipalId)) ?? list.tickets[0];
  await ada.goto(`/tickets/payroll/${ticket.id}`);
  const text = unique('Fixed in the next payroll run');
  await ada.getByLabel('Reply, visible to the customer').fill(text);

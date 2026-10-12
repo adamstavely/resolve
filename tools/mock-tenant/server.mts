@@ -13,7 +13,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { body, send, sha, startTenant, type FleetContext, type Tenant, type TenantConfig } from './tenant.mjs';
+import { body, send, setRelayFailure, sha, startTenant, type FleetContext, type Tenant, type TenantConfig } from './tenant.mjs';
 import { FleetWorker } from './worker.mjs';
 import type { Viewer } from './fixtures.mjs';
 
@@ -73,6 +73,7 @@ createServer(async (req, res) => {
    const t = await worker.createUnbound(String(b.appKey), String(b.displayName ?? b.appKey));
    return send(res, 200, { appKey: t.config.appKey, port: t.config.port });
   }
+  if (req.method === 'POST' && url.pathname === '/dev/relay') { const b = JSON.parse(await body(req)); setRelayFailure(String(b.appKey), !!b.failing); return send(res, 200, { ok: true }); }
   if (req.method === 'GET' && url.pathname === '/dev/fleet') return send(res, 200, [...fleet.values()].map(t => ({
    appKey: t.config.appKey, state: t.state, routable: t.routable, bound: t.bound, adopted: t.adopted, port: t.config.port, image: t.image,
    pilots: t.pilots.size, entitlements: t.entitlements.size, configRevision: t.configRevision, mailbox: t.mailbox,

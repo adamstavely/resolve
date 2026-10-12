@@ -5,6 +5,8 @@ import { json, jsonMutation, problem } from '../http';
 import { beginOperation, dispatch, KEYED_OPERATIONS, OperationConflict, toApi, type ActionSpec } from '../operations';
 import { actionSupported } from '../tenants/protocol';
 import { appRequest } from './http';
+import { bindPreflight, PreflightRefused } from '../integrations/preflight';
+import { trackReceipt } from '../integrations/receipts';
 
 const MESSAGES: Record<string, string> = {
  CONFLICT: 'This item changed since you opened it. Refresh and try again.',
@@ -32,7 +34,9 @@ export function operationResponse(op: Operation) {
  * outcome is uncertain or that was never sent (the user's explicit retry; the tenant replays by key).
  */
 export async function runAction<S extends z.ZodType>(request: Request, appKey: string, capability: CapabilityId, tool: ActionTool, schema: S,
- build: (body: z.infer<S>, app: RegistryApp) => Omit<ActionSpec, 'tool' | 'keyed'>, operationId?: (body: z.infer<S>) => string) {
+ build: (body: z.infer<S>, app: RegistryApp) => Omit<ActionSpec, 'tool' | 'keyed'>, operationId?: (body: z.infer<S>) => string,
+ /** Optional pre-dispatch gate (E3 pre-flight). Returns an id to bind to the new operation, or null when not gated. */
+ gate?: (body: z.infer<S>, app: RegistryApp, userId: string) => Promise<string | null>) {
  const raw = await jsonMutation(request);
  if (raw instanceof Response) return raw;
  const ctx = await appRequest(request, capability, appKey, `action.${tool}`);
@@ -40,6 +44,14 @@ export async function runAction<S extends z.ZodType>(request: Request, appKey: s
  if (!(await actionSupported(ctx.app, tool))) return problem(409, 'ACTION_UNAVAILABLE', `${ctx.app.displayName} does not support this action yet.`);
  const body = schema.safeParse(raw);
  if (!body.success) return problem(400, 'INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid request.');
+ let gated: string | null = null;
+ if (gate) {
+  try { gated = await gate(body.data, ctx.app, ctx.principal.userId); }
+  catch (e) {
+   if (e instanceof PreflightRefused) return json({ error: { code: e.code, message: e.message, requestId: crypto.randomUUID() }, preflight: e.preflight }, e.status);
+   throw e;
+  }
+ }
  const partial = build(body.data, ctx.app);
  const spec: ActionSpec = { ...partial, tool, keyed: KEYED_OPERATIONS.has(partial.operation) };
  const id = operationId?.(body.data) ?? crypto.randomUUID();
@@ -47,7 +59,9 @@ export async function runAction<S extends z.ZodType>(request: Request, appKey: s
  try { begun = await beginOperation(pool(), id, ctx.principal.userId, appKey, spec); }
  catch (e) { if (e instanceof OperationConflict) return problem(409, 'OPERATION_CONFLICT', MESSAGES.OPERATION_CONFLICT); throw e; }
  let row = begun.row;
+ if (gated && begun.created) await bindPreflight(pool(), gated, row.id);
  const redispatch = !begun.created && spec.keyed && (row.state === 'uncertain' || (row.state === 'failed' && row.failure_code === 'NOT_SENT'));
  if (begun.created || redispatch) row = await dispatch(pool(), ctx.app, row, spec);
+ if (row.state === 'succeeded') await trackReceipt(pool(), row).catch(() => {});
  return operationResponse(toApi(row, spec.keyed));
 }

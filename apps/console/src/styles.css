@@ -477,3 +477,56 @@ table.data td.small {overflow-wrap:anywhere;}
 .tbl {width:100%; border-collapse:collapse; font-size:12.5px;}
 .tbl th {font-family:var(--font-mono, ui-monospace, monospace); font-weight:500; font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-3); text-align:left; padding:6px 8px; border-bottom:1px solid var(--border);}
 .tbl td {padding:8px; border-bottom:1px solid var(--border); vertical-align:top;}
+
+/* Pre-flight dialog and verified receipt (plan 14, E3): prototype board 3. */
+.pf-drawer {background:var(--surface); color:var(--ink); border:0; border-radius:16px; box-shadow:0 26px 60px -18px rgba(20,22,28,.35); padding:0; flex-direction:column; overflow:auto; width:min(520px, calc(100vw - 32px)); max-height:calc(100vh - 48px);}
+dialog.pf-drawer[open] {display:flex; margin:auto;}
+dialog.pf-drawer::backdrop {background:rgba(20,22,28,.35);}
+.pf-head {padding:20px 22px 16px; border-bottom:1px solid var(--border);}
+.pf-head-row {display:flex; gap:12px; align-items:center;}
+.pf-icon {width:38px; height:38px; border-radius:9px; background:var(--surface-2); border:1px solid var(--border); display:grid; place-items:center; color:var(--ink-2); flex:none;}
+.pf-title {font-weight:640; font-size:18px; letter-spacing:-0.02em; margin:0;}
+.pf-chips {margin-top:4px;}
+.pf-impact {font-size:11px; color:var(--safe-ink); background:var(--safe-soft); padding:1px 7px; border-radius:5px;}
+.pf-x {width:34px; height:34px; border-radius:8px; border:0; background:transparent; color:var(--ink-3); cursor:pointer; display:grid; place-items:center;}
+.pf-x:hover {background:var(--hover);}
+.pf-target {display:flex; gap:10px; align-items:center; margin-top:14px; padding:9px 12px; border-radius:9px; background:var(--surface-2); border:1px solid var(--border);}
+.pf-avatar {width:28px; height:28px; border-radius:99px; background:var(--accent); color:var(--on-accent); display:grid; place-items:center; font-family:var(--font-mono, ui-monospace, monospace); font-size:11px; font-weight:600; flex:none;}
+.pf-target-name {font-size:13px; font-weight:600;}
+.pf-body {padding:18px 22px; flex:1; display:flex; flex-direction:column; gap:16px;}
+.pf-check-head {display:flex; justify-content:space-between; align-items:center;}
+.pf-h {font-weight:620; font-size:14px;}
+.pf-checks {list-style:none; margin:0; padding:0;}
+.chk {display:flex; gap:12px; align-items:flex-start; padding:11px 0; border-top:1px solid var(--border);}
+.chk:first-child {border-top:0;}
+.ic {width:22px; height:22px; border-radius:99px; display:grid; place-items:center; flex:none; margin-top:1px;}
+.ic[data-state="ok"] {background:var(--safe-soft); color:var(--safe-ink);}
+.ic[data-state="bad"] {background:var(--destructive-soft); color:var(--destructive-ink);}
+.ic[data-state="warn"] {background:var(--sensitive-soft); color:var(--sensitive-ink);}
+.ic[data-state="unknown"], .ic[data-state="wait"], .ic[data-state="na"] {background:var(--surface-2); color:var(--ink-3); border:1.5px dashed var(--border-strong);}
+.pf-check-title {font-weight:560; font-size:13.5px;}
+.pf-check-detail {font-size:12.5px; color:var(--ink-2);}
+.pf-conclusion {border-radius:12px; border:1px solid var(--border); background:var(--surface-2); padding:14px 16px; font-size:13.5px; color:var(--ink-2);}
+.pf-conclusion[data-tone="warn"] {border-color:color-mix(in oklch,var(--sensitive) 35%,transparent); background:var(--sensitive-soft); color:var(--sensitive-ink);}
+.pf-conclusion b {color:var(--ink);}
+.pf-foot {padding:16px 22px 20px; border-top:1px solid var(--border); background:var(--surface-2); display:flex; flex-direction:column; gap:12px;}
+.pf-grow {flex:1; justify-content:center;}
+.rc-page {display:grid; place-items:start center;}
+.rc-drawer {width:min(560px, 100%); display:flex;}
+.rc-head {padding:28px 22px 18px; text-align:center; border-bottom:1px solid var(--border);}
+.rc-badge {width:52px; height:52px; border-radius:99px; background:var(--surface-2); color:var(--ink-3); display:inline-grid; place-items:center;}
+.rc-badge[data-state="observed"], .rc-badge[data-state="accepted"] {background:var(--safe-soft); color:var(--safe-ink);}
+.rc-badge[data-state="failed"] {background:var(--destructive-soft); color:var(--destructive-ink);}
+.rc-title {font-weight:650; font-size:19px; margin:12px 0 0; letter-spacing:-0.02em;}
+.rc-sub {font-size:13.5px; color:var(--ink-2); margin:4px 0 0;}
+.rc-facts {margin:0; border-top:1px solid var(--border); padding-top:8px;}
+.rr {display:flex; justify-content:space-between; gap:12px; font-family:var(--font-mono, ui-monospace, monospace); font-size:12px; padding:5px 0;}
+.rr .k {color:var(--ink-3);}
+.rr dd {margin:0; text-align:right;}
+/* Live activity (board 2). */
+.la-verified {font-family:var(--font-mono, ui-monospace, monospace); font-size:10.5px; padding:0 6px; border-radius:4px; color:var(--safe-ink); background:var(--safe-soft);}
+.la-awaiting {font-family:var(--font-mono, ui-monospace, monospace); font-size:10.5px; padding:0 6px; border-radius:4px; color:var(--sensitive-ink); background:var(--sensitive-soft);}
+.la-unverified {font-family:var(--font-mono, ui-monospace, monospace); font-size:10.5px; padding:0 6px; border-radius:4px; color:var(--ink-3); background:var(--surface-2);}
+/* Links inside running text are underlined, not told apart by colour alone (WCAG 1.4.1). */
+p a, .small a, [role="status"] a, .ctx-incident-text a {text-decoration:underline; text-underline-offset:2px;}
+.btn, a.btn {text-decoration:none;}

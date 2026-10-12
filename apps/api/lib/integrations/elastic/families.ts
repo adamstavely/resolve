@@ -293,3 +293,17 @@ export async function fetchSubjectLogs(client: ElasticClient, patterns: readonly
   message: redactText(first<string>(h.fields, 'message') ?? '', 500) ?? '', traceId: safeId(first(h.fields, 'trace.id')),
  })));
 }
+
+/** Receipts (E3): telemetry events that carry Resolve operation ids (QB-OBS-2 instrumentation). */
+export async function fetchOperationEvents(client: ElasticClient, patterns: readonly string[], operationIds: readonly string[], w: Window) {
+ if (patterns.length === 0 || operationIds.length === 0) return [];
+ const r = await client.es<SearchBody>('POST', `/${indexList(patterns)}/_search`, {
+  size: Math.min(operationIds.length * 4, 200), track_total_hits: false, _source: false, sort: [{ '@timestamp': 'asc' }],
+  fields: ['@timestamp', 'service.name', 'labels.resolve_operation_id', 'http.response.status_code', 'event.outcome'],
+  query: { bool: { filter: [{ terms: { 'labels.resolve_operation_id': [...operationIds] } }, range(w)] } },
+ });
+ return r.body.hits.hits.map(h => ({
+  operationId: String(first(h.fields, 'labels.resolve_operation_id') ?? ''), at: iso(first(h.fields, '@timestamp')),
+  service: safeId(first(h.fields, 'service.name')) ?? 'unknown', status: first<number>(h.fields, 'http.response.status_code') ?? null, outcome: first<string>(h.fields, 'event.outcome') ?? 'unknown',
+ })).filter(e => e.at);
+}

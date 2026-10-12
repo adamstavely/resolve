@@ -3,7 +3,7 @@ import { RouterLink } from '@angular/router';
 import { z } from 'zod';
 import { BUNDLE_LABELS, CAPABILITIES, clearanceResponseSchema, dashboardResponseSchema, type CapabilityId, type DashboardResponse, type KpiMetric } from '../../../../../packages/contracts/src/index';
 import { IconComponent, MarkComponent } from '../icon.component';
-import { KnownIssuesComponent } from './service-health.component';
+import { KnownIssuesComponent, LiveActivityComponent } from './service-health.component';
 import { HEALTH_ICON, HEALTH_LABEL, HEALTH_TONE, ObservabilityService, REASON_TEXT } from '../observability.service';
 import type { AppHealth, ElasticFamily } from '../../../../../packages/contracts/src/index';
 import { api, AppState, fullTime, relativeTime } from '../state';
@@ -46,7 +46,7 @@ function connectMessage(result: string | null, app: string) {
 
 @Component({
  selector: 'rs-home-page',
- imports: [IconComponent, MarkComponent, RouterLink, KnownIssuesComponent],
+ imports: [IconComponent, MarkComponent, RouterLink, KnownIssuesComponent, LiveActivityComponent],
  template: `
 <div class="launchpad">
  @if (message(); as m) { <p class="notice" [attr.data-tone]="m.alert ? 'destructive' : 'safe'" [attr.role]="m.alert ? 'alert' : 'status'">{{ m.text }}</p> }
@@ -166,7 +166,7 @@ function connectMessage(result: string | null, app: string) {
   </div>
 
   <aside class="stack-lg" aria-label="Activity and access">
-   @if (state.can('observability.health')) { <rs-known-issues /> }
+   @if (state.can('observability.health')) { <rs-known-issues /><rs-live-activity /> }
    @if (state.can('dashboard.view')) {
     <section class="card" aria-labelledby="activity-title">
      <div class="card-head"><h2 class="card-title" id="activity-title"><rs-icon name="activity" [size]="15" />Recent activity</h2><span class="card-meta">Latest per app</span></div>

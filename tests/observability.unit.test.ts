@@ -157,3 +157,31 @@ describe('evidence snapshots (E2)', () => {
   expect(snapshotView({ ...row, facts: { ...row.facts, events: [{ ...facts.restricted.traces[0] } as never] } }, true).hashVerified).toBe(false);
  });
 });
+
+describe('pre-flight policy (E3)', () => {
+ const health = (state: 'healthy' | 'degraded' | 'unknown', reason: null | 'not_configured' = null) => ({
+  appKey: 'payroll', environment: 'production', state, reason, provenance: null, components: [],
+  summary: { slos: { total: 1, healthy: 0, degrading: 1, violated: 0, noData: 0, worstBurn: { sloId: 's', name: 'Payslips', target: 0.995, window: '1h', value: 4.2 } }, activeAlerts: 1,
+   synthetics: { passing: 3, total: 4, failing: ['Download payslip (eu-west)'], configured: 2, recent: [] } },
+ }) as never;
+ const ctx = (status: 'verified' | 'unverified', errors: number) => ({
+  subject: { status, externalId: status === 'verified' ? 'cust-1' : null },
+  matchedIssues: [{ issueId: '00000000-0000-4000-8000-0000000000cc', title: 'Payslips failing', kind: 'case', providerId: 'case-1', since: new Date().toISOString(), matched: [], missing: [], customerErrorsInWindow: errors }],
+  synthetics: [{ monitorId: 'm', name: 'Download payslip', location: 'eu-west', status: 'down', durationMs: null, checkedAt: new Date().toISOString() }],
+ }) as never;
+ test('a known issue touching this customer warns, suggests linking, and may be overridden; it never blocks a low-impact close', async () => {
+  const { decide } = await import('../apps/api/lib/integrations/preflight');
+  const d = decide('ticket.close', health('degraded'), ctx('verified', 2));
+  expect(d.outcome).toBe('warn');
+  expect(d.suggestedIssue).toMatchObject({ providerId: 'case-1' });
+  expect(d.checks.map(c => c.state)).toEqual(['bad', 'warn', 'warn']);
+ });
+ test('no issue touching this customer allows; unknown health or an unidentified customer is "unknown", which a low-impact action may proceed on', async () => {
+  const { decide } = await import('../apps/api/lib/integrations/preflight');
+  expect(decide('ticket.close', health('degraded'), ctx('verified', 0)).outcome).toBe('allow');
+  expect(decide('conversation.close', health('unknown', 'not_configured'), ctx('verified', 0)).outcome).toBe('unknown');
+  const u = decide('ticket.close', health('degraded'), ctx('unverified', 0));
+  expect(u.outcome).toBe('unknown');
+  expect(u.checks[1]).toMatchObject({ state: 'unknown' });
+ });
+});

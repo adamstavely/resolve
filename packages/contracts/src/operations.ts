@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { appKeySchema, isoDateTimeSchema, uuidSchema } from './common';
 import { announcementToolArgs, announcementToolResults } from './broadcasts';
+import { preflightUseSchema } from './observability';
 
 /*
  * Phase 3 operator actions (plan 00, plan 09, plan 10). Target tenant action tools, the change feed, and
@@ -148,8 +149,8 @@ export const availabilityResponseSchema = z.strictObject({
  })),
 });
 export const assignActionSchema = z.strictObject({ assignee: z.enum(['me', 'unassigned']), expectedVersion: version });
-export const conversationStatusActionSchema = z.strictObject({ status: z.enum(['open', 'snoozed', 'closed']), expectedVersion: version });
-export const ticketStatusActionSchema = z.strictObject({ statusCategory: z.enum(['open', 'pending', 'closed']), expectedVersion: version });
+export const conversationStatusActionSchema = z.strictObject({ status: z.enum(['open', 'snoozed', 'closed']), expectedVersion: version, ...preflightUseSchema });
+export const ticketStatusActionSchema = z.strictObject({ statusCategory: z.enum(['open', 'pending', 'closed']), expectedVersion: version, ...preflightUseSchema });
 
 export const operationSchema = z.strictObject({
  id: uuidSchema,

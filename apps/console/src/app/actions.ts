@@ -28,6 +28,8 @@ const body = (p: { kind: 'reply' | 'note'; content: string; operationId: string;
  */
 export class MessageSender {
  readonly pending = signal<PendingMessage[]>([]);
+ /** The last message the application confirmed, for its receipt (plan 14, E3). */
+ readonly lastSent = signal<{ operationId: string; kind: 'reply' | 'note' } | null>(null);
  constructor(private readonly path: () => string, private readonly confirmed: () => void, private readonly announce: (text: string) => void) {}
 
  async send(req: { kind: 'reply' | 'note'; content: string; operationId: string; files: UploadedFile[] }) {
@@ -49,7 +51,7 @@ export class MessageSender {
 
  private settle(id: string, r: ActionResult) {
   const p = this.pending().find(x => x.operationId === id)!;
-  if (r.ok) return this.done(id, p.kind === 'note' ? 'Note added.' : 'Reply sent.');
+  if (r.ok) { this.lastSent.set({ operationId: id, kind: p.kind }); return this.done(id, p.kind === 'note' ? 'Note added.' : 'Reply sent.'); }
   const uncertain = r.status === 202 || r.status === 0;
   this.upsert({ ...p, state: uncertain ? 'uncertain' : 'failed', message: r.message });
   this.announce(uncertain ? 'Your message was not confirmed.' : 'Your message was not sent.');

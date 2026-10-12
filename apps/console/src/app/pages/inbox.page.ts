@@ -3,13 +3,15 @@ import { Location } from '@angular/common';
 import { z } from 'zod';
 import { activityResponseSchema, conversationDetailResponseSchema, fleetConversationsResponseSchema, targetToolResults, type ConversationActivity } from '../../../../../packages/contracts/src/index';
 import { MessageSender, postAction } from '../actions';
-import { RESOLVE_ELEMENTS, ResolveConfirmDialog } from '../elements';
+import { RESOLVE_ELEMENTS } from '../elements';
 import { IconComponent } from '../icon.component';
 import { InboxService, rowFromDetail, type ConversationDetail, type MonitorApp, type QueueRow } from '../inbox.service';
 import { api, AppState, fullTime, relativeTime, UNAVAILABLE_TEXT } from '../state';
 import { ComposerComponent } from './composer.component';
 import { ThreadComponent } from './thread.component';
 import { SystemContextComponent } from './system-context.component';
+import { PreflightDialogComponent } from './preflight-dialog.component';
+import { RouterLink } from '@angular/router';
 
 type Status = 'open' | 'snoozed' | 'closed' | 'all';
 const pageSchema = targetToolResults.list_conversations.extend({ appKey: z.string() });
@@ -27,7 +29,7 @@ const MONITOR_LABELS: Record<MonitorApp['state'], string> = {
  */
 @Component({
  selector: 'rs-inbox-page',
- imports: [IconComponent, ThreadComponent, ComposerComponent, SystemContextComponent, ...RESOLVE_ELEMENTS],
+ imports: [IconComponent, ThreadComponent, ComposerComponent, SystemContextComponent, PreflightDialogComponent, RouterLink, ...RESOLVE_ELEMENTS],
  schemas: [CUSTOM_ELEMENTS_SCHEMA],
  template: `
 <div class="page inbox-page">
@@ -106,7 +108,7 @@ const MONITOR_LABELS: Record<MonitorApp['state'], string> = {
       @if (d.conversation.status === 'closed') { <button class="btn btn-sm" type="button" (click)="changeStatus('open')" [disabled]="busy()">Reopen</button> }
       @else {
        @if (d.conversation.status === 'open') { <button class="btn btn-sm" type="button" (click)="changeStatus('snoozed')" [disabled]="busy()">Snooze</button> }
-       <button class="btn btn-sm" type="button" (click)="closeDialog()?.show()" [disabled]="busy()">Close…</button>
+       <button class="btn btn-sm" type="button" (click)="preflight()?.open('conversation.close')" [disabled]="busy()">Close…</button>
       }
      }
      @if (state.can('chat.mark_read') && d.conversation.unread) { <button class="btn btn-sm btn-ghost" type="button" (click)="markRead()" [disabled]="busy()">Mark read for team</button> }
@@ -124,6 +126,7 @@ const MONITOR_LABELS: Record<MonitorApp['state'], string> = {
         [uploadPath]="'/api/apps/' + encode(selected()!.appKey) + '/uploads'" [target]="{ type: 'conversation', id: selected()!.id }" (typing)="onTyping($event)"
         (send)="sender.send($event)" (retry)="sender.retry($event)" (check)="sender.check($event)" (discard)="sender.discard($event)" />
       }
+      @if (sender.lastSent(); as l) { <p class="small"><a [routerLink]="['/receipts', l.operationId]">View the receipt for your {{ l.kind }}</a></p> }
      </div>
     }
    } @else if (detailError()) {
@@ -138,9 +141,10 @@ const MONITOR_LABELS: Record<MonitorApp['state'], string> = {
    [messages]="d.messages" [customer]="{ name: d.conversation.visitorName ?? null, email: d.conversation.visitorEmail ?? null }" />
  }
 
- <resolve-confirm-dialog #closeDialogRef tone="destructive" heading="Close this conversation?"
-  description="The customer's chat is marked resolved in the application. A new customer message reopens it."
-  confirmLabel="Close conversation" cancelLabel="Keep open" (confirmed)="changeStatus('closed')"/>
+ @if (selected() && detail(); as d) {
+  <rs-preflight-dialog #preflightRef [appKey]="selected()!.appKey" kind="conversation" [objectId]="selected()!.id" [customerName]="d.conversation.visitorName ?? null"
+   (confirmed)="changeStatus('closed', $event)" (diverted)="actionError.set(false); actionMessage.set($event)" />
+ }
 </div>`,
 })
 export class InboxPage {
@@ -164,7 +168,7 @@ export class InboxPage {
  readonly actionMessage = signal('');
  readonly actionError = signal(false);
  readonly busy = signal(false);
- readonly closeDialog = viewChild('closeDialogRef', { read: ResolveConfirmDialog });
+ readonly preflight = viewChild('preflightRef', { read: PreflightDialogComponent });
  readonly drafts = new Map<string, string>(); // in memory only: drafts can contain customer data (plan 09)
  readonly key = key;
  readonly relativeTime = relativeTime;
@@ -310,8 +314,8 @@ export class InboxPage {
  }
 
  async assign(assignee: 'me' | 'unassigned') { await this.act('/assign', { assignee, expectedVersion: this.detail()!.conversation.version }, assignee === 'me' ? 'Assigned to you.' : 'Unassigned.'); }
- async changeStatus(status: 'open' | 'snoozed' | 'closed') {
-  await this.act('/status', { status, expectedVersion: this.detail()!.conversation.version }, status === 'closed' ? 'Conversation closed.' : status === 'snoozed' ? 'Conversation snoozed.' : 'Conversation reopened.');
+ async changeStatus(status: 'open' | 'snoozed' | 'closed', pre?: { preflightId: string; override?: { reason: string } }) {
+  await this.act('/status', { status, expectedVersion: this.detail()!.conversation.version, ...(pre ?? {}) }, status === 'closed' ? 'Conversation closed.' : status === 'snoozed' ? 'Conversation snoozed.' : 'Conversation reopened.');
  }
  async markRead() { await this.act('/read', {}, 'Marked read for your team.'); }
 

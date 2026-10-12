@@ -7,8 +7,9 @@ import { api, AppState, fullTime, relativeTime } from '../state';
 import { ThreadComponent } from './thread.component';
 import { ComposerComponent } from './composer.component';
 import { SystemContextComponent } from './system-context.component';
+import { PreflightDialogComponent } from './preflight-dialog.component';
 import { MessageSender, postAction } from '../actions';
-import { RESOLVE_ELEMENTS, ResolveConfirmDialog } from '../elements';
+import { RESOLVE_ELEMENTS } from '../elements';
 
 /** The shell focuses <main> on navigation; once async content arrives, hand focus to the page heading (2.4.3). */
 function focusHeadingAfterLoad() {
@@ -21,7 +22,7 @@ const requesterName = (d: Detail) => d.messages.find(m => m.senderType === 'visi
 
 @Component({
  selector: 'rs-ticket-detail-page',
- imports: [RouterLink, IconComponent, ThreadComponent, ComposerComponent, SystemContextComponent, ...RESOLVE_ELEMENTS],
+ imports: [RouterLink, IconComponent, ThreadComponent, ComposerComponent, SystemContextComponent, PreflightDialogComponent, ...RESOLVE_ELEMENTS],
  schemas: [CUSTOM_ELEMENTS_SCHEMA],
  template: `
 <div class="page">
@@ -40,6 +41,7 @@ const requesterName = (d: Detail) => d.messages.find(m => m.senderType === 'visi
       <rs-composer fieldId="ticket-composer" [canReply]="state.can('ticket.reply')" [canNote]="state.can('ticket.note')" [pending]="sender.pending()"
        [uploadPath]="'/api/apps/' + encode(app()) + '/uploads'" [target]="{ type: 'ticket', id: id() }"
        (send)="sender.send($event)" (retry)="sender.retry($event)" (check)="sender.check($event)" (discard)="sender.discard($event)" />
+      @if (sender.lastSent(); as l) { <p class="small"><a [routerLink]="['/receipts', l.operationId]">View the receipt for your {{ l.kind }}</a></p> }
      </div>
     }
    </section>
@@ -71,7 +73,7 @@ const requesterName = (d: Detail) => d.messages.find(m => m.senderType === 'visi
         </select>
        </label>
       }
-      @if (actionMessage()) { <p class="small" [attr.role]="actionError() ? 'alert' : 'status'">{{ actionMessage() }}</p> }
+      @if (actionMessage()) { <p class="small" [attr.role]="actionError() ? 'alert' : 'status'">{{ actionMessage() }}@if (lastOperation(); as op) {&nbsp;<a [routerLink]="['/receipts', op]">View receipt</a> }</p> }
      </div>
     }
    </aside>
@@ -87,12 +89,15 @@ const requesterName = (d: Detail) => d.messages.find(m => m.senderType === 'visi
   <p role="status" class="muted">Loading ticket…</p>
  }
  <p class="sr-only" role="status">{{ announcement() }}</p>
- <resolve-confirm-dialog #closeDialogRef tone="destructive" heading="Resolve this ticket?"
-  description="The ticket is marked resolved in the application and the requester is notified by the application's own rules."
-  confirmLabel="Resolve ticket" cancelLabel="Keep open" (confirmed)="setStatus('closed')" (cancelled)="cancelClose()"/>
+ @if (detail(); as d) {
+  <rs-preflight-dialog #preflightRef [appKey]="app()" kind="ticket" [objectId]="id()" [customerName]="customerName(d)"
+   (confirmed)="setStatus('closed', $event)" (cancelled)="cancelClose()" (diverted)="diverted($event)" />
+ }
 </div>`,
 })
 export class TicketDetailPage {
+ readonly lastOperation = signal<string | null>(null);
+ readonly preflight = viewChild('preflightRef', { read: PreflightDialogComponent });
  readonly customerName = requesterName;
  readonly app = input.required<string>();
  readonly id = input.required<string>();
@@ -105,7 +110,6 @@ export class TicketDetailPage {
  readonly actionMessage = signal('');
  readonly actionError = signal(false);
  readonly announcement = signal('');
- readonly closeDialog = viewChild('closeDialogRef', { read: ResolveConfirmDialog });
  private statusSelect?: HTMLSelectElement;
  readonly encode = encodeURIComponent;
  readonly base = () => `/api/apps/${encodeURIComponent(this.app())}/tickets/${encodeURIComponent(this.id())}`;
@@ -124,18 +128,21 @@ export class TicketDetailPage {
  /** Resolving asks for confirmation; other status changes apply directly. */
  requestStatus(select: HTMLSelectElement) {
   const value = select.value as 'open' | 'pending' | 'closed';
-  if (value === 'closed') { this.statusSelect = select; this.closeDialog()?.show(); return; }
+  if (value === 'closed') { this.statusSelect = select; void this.preflight()?.open('ticket.close'); return; }
   void this.setStatus(value);
  }
  cancelClose() { if (this.statusSelect) this.statusSelect.value = this.detail()!.ticket.status.category; }
- async setStatus(statusCategory: 'open' | 'pending' | 'closed') {
-  await this.act('/status', { statusCategory, expectedVersion: this.detail()!.ticket.version }, 'Status updated.');
+ async setStatus(statusCategory: 'open' | 'pending' | 'closed', pre?: { preflightId: string; override?: { reason: string } }) {
+  await this.act('/status', { statusCategory, expectedVersion: this.detail()!.ticket.version, ...(pre ?? {}) }, 'Status updated.');
  }
+ /** Linked to the known issue instead of resolving: the ticket stays open. */
+ diverted(text: string) { this.cancelClose(); this.actionError.set(false); this.actionMessage.set(text); this.lastOperation.set(null); }
  private async act(suffix: string, body: unknown, success: string) {
   this.busy.set(true);
   const r = await postAction(this.base() + suffix, body);
   this.busy.set(false);
   this.actionError.set(!r.ok); this.actionMessage.set(r.ok ? success : r.message);
+  this.lastOperation.set(r.ok ? r.operation?.id ?? null : null);
   this.load(false);
  }
 }

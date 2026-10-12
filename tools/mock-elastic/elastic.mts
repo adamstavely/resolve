@@ -199,6 +199,12 @@ export async function startMockElastic(opts: { esPort?: number; kibanaPort?: num
     state.scenario.indices.set(String(body.index), list);
     return send(res, 200, { index: body.index, count: list.length });
    }
+   case '/dev/case': {
+    const c = state.scenario.cases.find(x => x.id === body.id);
+    if (!c) return send(res, 404, { error: 'unknown case' });
+    c.status = body.status; c.updated_at = new Date().toISOString();
+    return send(res, 200, { id: c.id, status: c.status });
+   }
    case '/dev/reset': mock.reset(); return send(res, 200, { ok: true });
    case '/dev/state': return send(res, 200, { fault: state.fault, calls: state.calls, keys: state.keys.map(k => ({ id: k.id, revoked: !!k.revoked })), indices: Object.fromEntries([...state.scenario.indices].map(([k, v]) => [k, v.length])) });
    default: return send(res, 404, { error: 'not_found' });

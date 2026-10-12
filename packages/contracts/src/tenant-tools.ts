@@ -51,6 +51,7 @@ export const GAPS = {
  'QB-FILE-1': 'No authorized attachment download contract for Resolve',
  'QB-FILE-2': 'upload_file is not bound to an uploader and target, has no type policy, scan result, expiry or upload key',
  'QB-TIER-1': "Tiered support (fork plan v2/30) is not built; no tool reports the caller's effective tier (T1-T3) in an application",
+ 'QB-OBS-2': "Applications do not carry Resolve's operation key into downstream telemetry (labels.resolve_operation_id), so receipts cannot observe delivery",
  'QB-OBS-1': "No tool returns a customer's verified external id (the host app's signed-identify sub) for a conversation or ticket",
  'QB-CHAT-8': 'No OAuth typing/viewing signals or activity read; agent presence is a side effect of the stream connection',
 } as const;

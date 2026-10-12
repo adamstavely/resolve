@@ -406,3 +406,76 @@ export const evidenceSnapshotSchema = z.strictObject({
 export type EvidenceSnapshot = z.infer<typeof evidenceSnapshotSchema>;
 export const evidenceCaptureSchema = z.strictObject({ requestId: uuidSchema, previousId: uuidSchema.optional() });
 
+
+// ── E3: pre-flight checks, verified receipts, issue subscriptions ──
+
+/**
+ * Action policies (plan 12 §7). Version-stamped and stored with each pre-flight. Only actions Resolve performs today;
+ * account actions get policies when their executor exists. A low-impact action may proceed on "unknown"; an advisory
+ * warning may be overridden with a reason; a block never can. Nothing overrides permissions.
+ */
+export const ACTION_POLICY_VERSION = 1;
+export const ACTION_POLICIES = {
+ 'ticket.close': { label: 'Resolve this ticket?', verb: 'Resolve ticket', impact: 'low', overridable: true, refuseUnknown: false },
+ 'conversation.close': { label: 'Close this conversation?', verb: 'Close conversation', impact: 'low', overridable: true, refuseUnknown: false },
+} as const;
+export type PreflightAction = keyof typeof ACTION_POLICIES;
+export const PREFLIGHT_TTL_SECONDS = 120;
+
+export const preflightCheckSchema = z.strictObject({
+ state: z.enum(['ok', 'warn', 'bad', 'unknown']),
+ title: z.string(), detail: z.string(),
+ sources: z.array(z.enum(['APM', 'SLO', 'ALERTS', 'SYNTHETICS', 'CASES'])),
+});
+export const preflightSchema = z.strictObject({
+ id: uuidSchema,
+ action: z.enum(Object.keys(ACTION_POLICIES) as [PreflightAction, ...PreflightAction[]]),
+ appKey: appKeySchema, objectKind: z.enum(['ticket', 'conversation']), objectId: z.string(),
+ impact: z.enum(['low', 'high']),
+ outcome: z.enum(['allow', 'warn', 'block', 'unknown']),
+ checks: z.array(preflightCheckSchema),
+ conclusion: z.string().nullable(),
+ /** The known issue to link instead, when the warning comes from one. */
+ suggestedIssue: z.strictObject({ issueId: uuidSchema, title: z.string(), kind: z.enum(['alert', 'case']), providerId: z.string() }).nullable(),
+ customer: z.strictObject({ externalId: z.string().nullable(), status: z.enum(SUBJECT_STATUS) }),
+ overridable: z.boolean(),
+ policyVersion: z.number().int(),
+ evaluatedAt: isoDateTimeSchema, expiresAt: isoDateTimeSchema,
+});
+export type Preflight = z.infer<typeof preflightSchema>;
+export const preflightRequestSchema = z.strictObject({ action: preflightSchema.shape.action });
+/** Fields a gated action accepts alongside its own body. */
+export const preflightUseSchema = {
+ preflightId: uuidSchema.optional(),
+ override: z.strictObject({ reason: z.string().trim().min(5).max(300) }).optional(),
+};
+
+export const RECEIPT_STAGE_STATES = ['ok', 'bad', 'wait', 'na'] as const;
+export const receiptSchema = z.strictObject({
+ operationId: uuidSchema,
+ appKey: appKeySchema,
+ operation: z.string(),
+ /** "Delivered" only when downstream evidence was observed; "Sent" when the application accepted it and nothing more is known. */
+ state: z.enum(['pending', 'accepted', 'observed', 'unverified', 'failed']),
+ title: z.string(), subtitle: z.string(),
+ stages: z.array(z.strictObject({ key: z.string(), title: z.string(), state: z.enum(RECEIPT_STAGE_STATES), source: z.string(), at: isoDateTimeSchema.nullable(), detail: z.string().nullable() })),
+ facts: z.strictObject({ action: z.string(), target: z.string(), agent: z.string(), clearance: z.string().nullable(), ref: z.string() }),
+ preflight: z.strictObject({ outcome: z.string(), overrideReason: z.string().nullable() }).nullable(),
+});
+export type Receipt = z.infer<typeof receiptSchema>;
+
+export const liveActivitySchema = z.strictObject({
+ entries: z.array(z.strictObject({
+  at: isoDateTimeSchema, action: z.string(), appKey: appKeySchema, actor: z.string(), own: z.boolean(),
+  /** Only for the person's own actions; others' targets are not disclosed. */
+  operationId: uuidSchema.nullable(), target: z.string().nullable(),
+  verification: z.enum(['verified', 'awaiting', 'unverified', 'none']),
+ })),
+});
+
+export const issueSubscriptionSchema = z.strictObject({
+ id: uuidSchema, issueId: uuidSchema, appKey: appKeySchema, title: z.string(), providerId: z.string(), kind: z.enum(['alert', 'case']),
+ cleared: z.boolean(), objectKind: z.enum(['ticket', 'conversation']).nullable(), objectId: z.string().nullable(), createdAt: isoDateTimeSchema,
+});
+export const issueSubscriptionListSchema = z.strictObject({ subscriptions: z.array(issueSubscriptionSchema) });
+export const subscribeRequestSchema = z.strictObject({ objectKind: z.enum(['ticket', 'conversation']).optional(), objectId: z.string().min(1).max(200).optional() });

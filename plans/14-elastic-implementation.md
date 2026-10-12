@@ -1,6 +1,6 @@
 # Elastic integration — implementation plan
 
-Status: E0–E2 built and tested against the mock, 2026-10-12 ([E0](../docs/evidence/elastic-e0-contracts-connections.md), [E1](../docs/evidence/elastic-e1-health-known-issues.md), [E2](../docs/evidence/elastic-e2-customer-context-evidence.md) evidence). This turns [plan 12](12-elastic-observability-integration.md) and the `design/reference/resolve-integrations.html`
+Status: E0–E3 built and tested against the mock, 2026-10-12 ([E0](../docs/evidence/elastic-e0-contracts-connections.md), [E1](../docs/evidence/elastic-e1-health-known-issues.md), [E2](../docs/evidence/elastic-e2-customer-context-evidence.md), [E3](../docs/evidence/elastic-e3-preflight-receipts.md) evidence). Owner direction 2026-10-12: build E3 after E2, applied to the actions Resolve performs today; account actions keep waiting for their executor. This turns [plan 12](12-elastic-observability-integration.md) and the `design/reference/resolve-integrations.html`
 prototype (seven boards) into buildable work for this repository. Scope is the confirmed first release: E0–E2, with
 E5 qualification folded into Phase 6. E3 (pre-flight and verified receipts), E4 (ML patterns, AI summaries) and the
 ServiceNow boards are out of scope.

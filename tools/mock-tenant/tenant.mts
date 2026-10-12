@@ -12,7 +12,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { createLocalJWKSet, createRemoteJWKSet, exportJWK, generateKeyPair, jwtVerify, SignJWT, type JWK } from 'jose';
-import { buildTenant, callTool, ToolError, type TenantData, type Viewer } from './fixtures.mjs';
+import { buildTenant, callTool, customerIdentity, ToolError, type TenantData, type Viewer } from './fixtures.mjs';
 import { TenantStore } from './actions.mjs';
 
 export interface TenantConfig {
@@ -99,6 +99,27 @@ export async function body(req: IncomingMessage, limit = 16_384) {
  let raw = '';
  for await (const chunk of req) { raw += chunk; if (raw.length > limit) throw new Error('Body too large'); }
  return raw;
+}
+
+/*
+ * QB-OBS-2 (target): the application carries Resolve's operation key into downstream telemetry. After a reply, the
+ * mock's notification service "hands the email to the relay" a moment later and records it in the mock Elastic.
+ * Development only; a dropped ingest is simply a receipt that is never verified.
+ */
+const ELASTIC_INGEST = process.env.MOCK_ELASTIC_INGEST ?? 'http://127.0.0.1:3400/dev/ingest';
+const relayFail = new Set<string>();
+export const setRelayFailure = (appKey: string, failing: boolean) => { if (failing) relayFail.add(appKey); else relayFail.delete(appKey); };
+function emitDeliveryTelemetry(appKey: string, tool: string, args: Record<string, unknown>, data: TenantData) {
+ const principal = tool === 'reply_to_ticket' ? data.tickets.find(x => x.id === args.ticketId)?.requesterPrincipalId : data.conversations.find(x => x.id === args.conversationId)?.visitorPrincipalId;
+ const who = customerIdentity(principal ?? null);
+ const failing = relayFail.has(appKey);
+ setTimeout(() => {
+  fetch(ELASTIC_INGEST, { method: 'POST', body: JSON.stringify({ index: 'traces-apm-default', docs: [{
+   '@timestamp': new Date().toISOString(), 'processor.event': 'transaction', 'service.name': 'notification-service', 'service.environment': 'production',
+   'transaction.name': 'POST /send', 'transaction.type': 'request', 'event.outcome': failing ? 'failure' : 'success', 'http.response.status_code': failing ? 550 : 202,
+   'transaction.duration.us': 18_000, 'labels.app': appKey, 'labels.resolve_operation_id': String(args.operationKey), ...(who.verified ? { 'user.id': who.externalId } : {}),
+  }] }) }).catch(() => {});
+ }, 1500);
 }
 
 export async function startTenant(t: TenantConfig, ctx: FleetContext, image: string): Promise<Tenant> {
@@ -216,6 +237,7 @@ export async function startTenant(t: TenantConfig, ctx: FleetContext, image: str
     }
    } else if (tool in ANNOUNCEMENT_SCOPES) result = tenant.announcements.call(tool, args, nameOf(viewer.principalId), tenant.embedInstalled);
    else result = store.call(viewer, tool, args) ?? callTool(data, viewer, tool, args);
+   if ((tool === 'reply_to_ticket' || tool === 'reply_to_conversation') && typeof args.operationKey === 'string') emitDeliveryTelemetry(t.appKey, tool, args, data);
    // Fault injection: the write committed, but the response is lost.
    if (failMode === 'drop' && WRITE_TOOLS.has(tool)) { res.socket?.destroy(); return; }
    reply({ content: [{ type: 'text', text: JSON.stringify(result) }] });
