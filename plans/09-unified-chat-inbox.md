@@ -49,7 +49,7 @@ an integration stream open. Specific behavior is settled in the phase-0 contract
   by ID with object authorization; fetch linked ticket context under its own permission checks.
 - Send reply/note with a client operation ID and payload hash; get operation result for ambiguous sends.
   Existing non-idempotent send endpoints need a narrow fork adapter before automatic retries are allowed.
-- Unread contract requires a decision: Quackback currently uses a shared agent-side watermark, not per-agent receipts. Proposed v1 preserves that shared meaning; personal unread needs additional design (QB-CHAT-7).
+- Unread uses Quackback's shared support-team watermark (owner decision 2026-10-12). Label it as team unread; there is no per-SRE unread.
 - Assign/claim, set status and preserve existing tier/SLA rules. Resolve must not bypass tenant assignment
   invariants or reimplement them in its own database.
 - Attachment upload/download with tenant authorization, size/type policy, scanning and expiry behavior.

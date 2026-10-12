@@ -4,9 +4,11 @@ import { appKeySchema, isoDateTimeSchema, payloadHash, uuidSchema } from './comm
 /*
  * Banner broadcasts (plan 08). Everyone audience only; recipients are an explicit snapshot reviewed by
  * the author. One delivery per app per revision, keyed so retries and reconciliation stay idempotent.
- * Field limits follow the fork's announcementInputSchema (lib/shared/fork/announcements/schema.ts);
- * the fork has no Everyone tier yet (QB-ANN-3), so `audience` is Resolve's target contract.
+ * Field limits follow the fork's announcementInputSchema (lib/shared/fork/announcements/schema.ts).
+ * Owner decision 2026-10-12: Everyone is the fork's 'authenticated' tier (portals sit behind intranet SSO).
  */
+export const EVERYONE_TENANT_AUDIENCE = { tier: 'authenticated', segmentIds: [] as string[] } as const;
+
 export const broadcastContentSchema = z.strictObject({
  kind: z.enum(['info', 'warning', 'critical', 'maintenance', 'success']),
  title: z.string().trim().min(1).max(140),

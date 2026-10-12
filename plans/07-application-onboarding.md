@@ -147,7 +147,7 @@ copy-snippet and cancellation actions work with keyboard and screen readers. No 
 
 1. May each application/environment have exactly one Quackback instance, or must v1 support shared instances across applications?
 2. Must onboarding initially support both creating an instance and adopting an existing managed instance, or can adoption follow later?
-3. Who may register an application, who may provision infrastructure, and who may activate it; can one authorized person hold all three capabilities?
+3. ~~Who may register, provision and activate?~~ Decided 2026-10-12: admins, and one admin may hold all three.
 4. Which features/channels are mandatory at activation, and which should default off with follow-up tasks?
 5. What hostname, environment and mail-slug naming conventions should be inherited from central policy?
 

@@ -90,7 +90,7 @@ reads a consistent snapshot. Return schemaVersion, asOf, appliedFilters, counts,
 warningHorizonMinutes, supportedMetrics and matching drill-down descriptors.
 A companion `list_support_activity` returns authorized cursor-paged activity and coverage metadata.
 
-Require appropriate read:chat scope and per-entity permissions/object predicates; if analytics.view is
+Owner decision 2026-10-12: aggregates require analytics.view as well as read:chat and the per-entity permissions/object predicates. Previously: if analytics.view is
 required, grant it deliberately rather than allowing aggregates to bypass ticket/conversation visibility.
 A metric without permission or implementation is unavailable, never zero. Resolve aggregates only compatible
 definitions, reports app coverage/last refresh and partial failures, and distinguishes no data from no access.

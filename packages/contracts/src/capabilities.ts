@@ -51,10 +51,11 @@ export type CapabilityId = keyof typeof CAPABILITIES;
 /**
  * Proposed seed bundles (plan 02). UX, Dev, Stakeholder and portfolio surfaces are not first release.
  * Tier 1–3 bundles depend on Quackback tier prerequisites and are added with them, not assumed here.
- * Who may register, provision and activate is an open owner decision (plan 07, decision 3).
+ * Owner decision 2026-10-12 (plan 07, decision 3): admins register, provision and activate, and one
+ * admin may hold all three. Administration capabilities belong to fleet-admin only.
  */
 export const BUNDLES = {
- 'fleet-owner': Object.keys(CAPABILITIES) as CapabilityId[],
+ 'fleet-admin': Object.keys(CAPABILITIES) as CapabilityId[],
  'fleet-agent': ['fleet.view', 'connection.manage', 'dashboard.view', 'chat.read', 'chat.reply', 'chat.note', 'chat.assign', 'chat.status', 'chat.mark_read', 'ticket.read', 'ticket.reply', 'ticket.note', 'ticket.assign', 'ticket.status'],
  'fleet-observer': ['fleet.view', 'connection.manage', 'dashboard.view', 'chat.read', 'ticket.read'],
  'announcement-author': ['fleet.view', 'connection.manage', 'broadcast.publish'],

@@ -20,6 +20,13 @@
 - Full WCAG 2.2 AA frontend conformance is a release requirement.
 - Use the supplied Resolve prototype and Interop style guide as design references.
 
+- Decided 2026-10-12:
+  - Everyone banners use Quackback's existing `authenticated` audience tier; portals sit behind intranet SSO.
+  - Unread follows Quackback's shared support-team watermark. There is no per-SRE unread state (QB-CHAT-7 closed).
+  - Admins register applications, provision instances and activate them. One admin may hold all three (plan 07, decision 3).
+  - Dashboard KPI aggregates require `analytics.view` in addition to the per-entity permissions (plan 11).
+  - The IdP will support both OAuth 2.0/OpenID Connect and SAML 2.0. Until the product is chosen, development uses a mock IdP.
+
 - Initial-release operator workflows are limited to chats and tickets. Feedback, roadmap and changelog views/actions are excluded, including feedback triage/merge and changelog publishing.
 
 ## Proposed defaults, not newly confirmed decisions
@@ -33,14 +40,13 @@
 
 ## Owner/infrastructure inputs (one question per line)
 
-1. Should unread state follow Quackback’s shared support-team watermark (proposed), or does Resolve require personal unread state per SRE?
-2. Which IdP/directory product will provide SSO and authoritative group/user changes, and can we use its directory API as well as SCIM?
-3. Is a 15-minute revocation target acceptable during normal operation, or is a request-enforced entitlement lease required even if a directory outage locks out managed users?
-4. Can held-back Quackback tenants be temporarily suspended during upgrades, or must different versions keep serving concurrently?
-5. What internal DNS domain, private CA, edge SSO product and AWS region/environment should the deployment plan target?
-6. Who owns the internal mail service, and can it supply a catch-all mailbox with trustworthy per-recipient routing headers and an agreed queued-mail retention period?
-7. What initial app count, simultaneous operator count and expected daily ticket/broadcast volume should capacity tests use?
-8. What retention and access requirements apply to operator audit records, directory events, encrypted grants and dead-letter mail?
+1. Which IdP/directory product will replace the mock, and does it offer a directory API as well as SCIM for authoritative user/group changes?
+2. Is a 15-minute revocation target acceptable during normal operation, or is a request-enforced entitlement lease required even if a directory outage locks out managed users?
+3. Can held-back Quackback tenants be temporarily suspended during upgrades, or must different versions keep serving concurrently?
+4. What internal DNS domain, private CA, edge SSO product and AWS region/environment should the deployment plan target?
+5. Who owns the internal mail service, and can it supply a catch-all mailbox with trustworthy per-recipient routing headers and an agreed queued-mail retention period?
+6. What initial app count, simultaneous operator count and expected daily ticket/broadcast volume should capacity tests use?
+7. What retention and access requirements apply to operator audit records, directory events, encrypted grants and dead-letter mail?
 
 Only ask these when they affect the next work package; unresolved production inputs do not prevent refining
 contracts. Do not turn proposed defaults into confirmed requirements by repeating them in later documents.

@@ -106,7 +106,7 @@ marker established by these paths; the previous plan's “real-agent unread rece
 
 Proposed v1: preserve Quackback's shared support-team unread semantics and label them accurately.
 If personal unread is required, add a separate per-principal marker design and reconcile it with shared
-state rather than storing a misleading local Resolve-only count. Owner decision remains pending.
+state rather than storing a misleading local Resolve-only count. Owner decision 2026-10-12: shared support-team unread; closed.
 
 ## Integration work order
 

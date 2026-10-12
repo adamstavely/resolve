@@ -30,6 +30,17 @@ describe('capability catalogue', () => {
   expect(scopesFor(capabilitiesFor(['announcement-author']))).toEqual(['read:announcement', 'write:announcement']);
  });
 
+ test('only admins hold administration capabilities', () => {
+  for (const [bundle, caps] of Object.entries(BUNDLES)) {
+   const admin = caps.filter(c => CAPABILITIES[c].kind === 'administration');
+   expect(admin.length > 0, bundle).toBe(bundle === 'fleet-admin');
+  }
+ });
+
+ test('dashboard aggregates require analytics.view', () => {
+  expect(TENANT_TOOLS.get_support_dashboard.permissions).toContain('analytics.view');
+ });
+
  test('out-of-scope domains are not requested by any bundle', () => {
   const all = scopesFor(capabilitiesFor(Object.keys(BUNDLES) as (keyof typeof BUNDLES)[]));
   for (const forbidden of ['read:feedback', 'write:feedback', 'write:changelog', 'read:article', 'write:article', 'write:settings']) expect(all).not.toContain(forbidden);
@@ -59,13 +70,13 @@ describe('capability catalogue', () => {
    'chat.reply': ['QB-CHAT-4', 'QB-CHAT-6'],
    'chat.note': ['QB-CHAT-1', 'QB-CHAT-6'],
    'chat.assign': ['QB-CHAT-1'],
-   'chat.mark_read': ['QB-CHAT-1', 'QB-CHAT-7'],
+   'chat.mark_read': ['QB-CHAT-1'],
    'ticket.read': ['QB-TICKET-1'],
    'ticket.reply': ['QB-CHAT-6'],
    'ticket.note': ['QB-CHAT-6'],
    'ticket.assign': ['QB-TICKET-2'],
    'ticket.status': ['QB-TICKET-2'],
-   'broadcast.publish': ['QB-ANN-1', 'QB-ANN-2', 'QB-ANN-3'],
+   'broadcast.publish': ['QB-ANN-1', 'QB-ANN-2'],
   } satisfies Partial<Record<CapabilityId, string[]>>);
  });
 });

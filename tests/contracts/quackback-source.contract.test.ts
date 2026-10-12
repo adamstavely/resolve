@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { QUACKBACK_BASELINE, QUACKBACK_SCOPES, TENANT_TOOLS, toolArgs, type TenantToolName } from '../../packages/contracts/src';
+import { EVERYONE_TENANT_AUDIENCE, QUACKBACK_BASELINE, QUACKBACK_SCOPES, TENANT_TOOLS, toolArgs, type TenantToolName } from '../../packages/contracts/src';
 
 /*
  * Verifies the tenant tool inventory against a Quackback fork checkout (plan 04 "Contract" layer).
@@ -53,7 +53,7 @@ describe(`Quackback fork ${QUACKBACK_BASELINE.commit.slice(0, 9)}`, () => {
   expect(toolScopes[name]).toBeUndefined();
  });
 
- test('announcement audience still lacks Everyone (QB-ANN-3)', () => {
-  expect(read('shared/fork/announcements/types.ts')).toMatch(/AUDIENCE_TIERS = \['authenticated', 'segments'\]/);
+ test("Everyone maps to the fork's 'authenticated' audience tier", () => {
+  expect(read('shared/fork/announcements/types.ts')).toMatch(new RegExp(`AUDIENCE_TIERS = \\[[^\\]]*'${EVERYONE_TENANT_AUDIENCE.tier}'`));
  });
 });
