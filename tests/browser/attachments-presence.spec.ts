@@ -168,8 +168,8 @@ test('availability is explicit: monitoring the inbox does not make an agent avai
  expect((await tenantGet('/dev/availability'))['Sam Agent']).toBe('away');
 
  const ada = await signedIn(browser, 'Ada Admin');
- const events = (await (await ada.request.get('/api/audit?category=presence&limit=20')).json()).events
-  .filter((e: { actor: string; summary: { app?: string } }) => e.actor === 'Sam Agent' && e.summary.app === 'payroll');
+ const events = (await (await ada.request.get('/api/audit?category=presence&limit=100')).json()).events
+  .filter((e: { operation: string; actor: string; summary: { app?: string } }) => e.operation === 'presence.availability' && e.actor === 'Sam Agent' && e.summary.app === 'payroll');
  expect(events.slice(0, 3).map((e: { summary: { status: string } }) => e.summary.status)).toEqual(['away', 'available', 'away']);
  await sam.context().close(); await ada.context().close();
 });

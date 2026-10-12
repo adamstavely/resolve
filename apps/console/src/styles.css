@@ -347,3 +347,12 @@ table.data td.small {overflow-wrap:anywhere;}
 .manage {display:grid; gap:10px; padding:8px 0;}
 .pilot-list {display:grid; gap:14px; padding-left:20px;}
 .pilot-list li {display:grid; gap:8px;}
+
+/* ---------- Announcements ---------- */
+.textarea {height:auto; min-height:84px; padding:8px 10px; resize:vertical;}
+.app-checklist {list-style:none; margin:0; padding:0; display:grid; gap:6px;}
+.content-preview {display:grid; gap:8px; margin:0 0 10px; font-size:var(--fs-sm);}
+.content-preview div {display:grid; grid-template-columns:minmax(0,90px) minmax(0,1fr); gap:10px;}
+.content-preview dt {color:var(--ink-3);}
+.content-preview dd {margin:0; overflow-wrap:anywhere;}
+.notes {margin:0; padding-left:30px; display:grid; gap:6px; font-size:var(--fs-sm);}

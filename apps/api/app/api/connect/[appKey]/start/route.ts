@@ -28,7 +28,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ appKey:
   return back('unavailable', appKey);
  }
  const state = client.randomState(), nonce = client.randomNonce(), codeVerifier = client.randomPKCECodeVerifier();
- const scopes = tenantScopes(principal.capabilities);
+ const scopes = tenantScopes(principal.capabilities, cfg.serverMetadata().scopes_supported ?? []);
  await createConnectAttempt(pool(), { stateHash: sha256(state), userId: principal.userId, appKey, sessionHash: principal.sessionHash,
   codeVerifier, nonce, requestedScopes: scopes, ttlSeconds: 600 });
  const url = client.buildAuthorizationUrl(cfg, { redirect_uri: connectRedirectUri(), scope: scopes.join(' '), state, nonce,

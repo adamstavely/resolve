@@ -60,7 +60,7 @@ function initialTheme(): 'light' | 'dark' {
 
  <div class="workbench">
   <nav class="sidenav" aria-label="Primary">
-   @if (state.can('chat.read') || state.can('ticket.read')) {
+   @if (state.can('chat.read') || state.can('ticket.read') || state.can('broadcast.publish')) {
    <ul class="nav-list">
     @if (state.can('chat.read')) {
      <li><a class="tab" routerLink="/inbox" routerLinkActive="active" ariaCurrentWhenActive="page">
@@ -73,6 +73,10 @@ function initialTheme(): 'light' | 'dark' {
     @if (state.can('ticket.read')) {
      <li><a class="tab" routerLink="/tickets" routerLinkActive="active" ariaCurrentWhenActive="page">
       <span class="nav-ic"><rs-icon name="ticket" [size]="17" /></span><span class="tab-name">Tickets</span></a></li>
+    }
+    @if (state.can('broadcast.publish')) {
+     <li><a class="tab" routerLink="/announcements" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <span class="nav-ic"><rs-icon name="megaphone" [size]="17" /></span><span class="tab-name">Announcements</span></a></li>
     }
    </ul>
    }

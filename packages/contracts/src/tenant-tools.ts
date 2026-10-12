@@ -101,6 +101,7 @@ export const TENANT_TOOLS = {
  list_support_activity: { status: 'missing', scope: 'read:chat', permissions: ['conversation.view', 'ticket.view'], objectPolicy: 'Entries and content filtered per caller', idempotency: 'read', gaps: ['QB-DASH-2'] },
  list_announcements: { status: 'missing', scope: 'read:announcement', permissions: ['announcement.view'], objectPolicy: 'Workspace announcements', idempotency: 'read', gaps: ['QB-ANN-1'] },
  upsert_announcement: { status: 'missing', scope: 'write:announcement', permissions: ['announcement.manage'], objectPolicy: "Fleet broadcasts use tier 'authenticated' (Everyone)", idempotency: 'keyed', gaps: ['QB-ANN-1', 'QB-ANN-2'] },
+ get_announcement_by_key: { status: 'missing', scope: 'read:announcement', permissions: ['announcement.manage'], objectPolicy: 'Announcements this caller published', idempotency: 'read', gaps: ['QB-ANN-2'] },
  archive_announcement: { status: 'missing', scope: 'write:announcement', permissions: ['announcement.manage'], objectPolicy: 'Version-checked against local edits', idempotency: 'idempotent', gaps: ['QB-ANN-1'] },
 } as const satisfies Record<string, ToolDescriptor>;
 export type TenantToolName = keyof typeof TENANT_TOOLS;

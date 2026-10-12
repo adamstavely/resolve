@@ -34,6 +34,10 @@
     - **Strategies:** v1 supports both creating a new managed instance and adopting an existing unbound managed instance. Adoption first shows a before/after impact report. (decision 2)
     - **Activation:** chat, SSO sign-in and inbound support email must all pass validation first. The banner snippet stays optional. (decision 4)
     - **Naming:** support hostnames and mail slugs are entered freely, but a hostname must be under an approved support domain (`SUPPORT_DOMAINS`). (decision 5)
+  - Banner broadcasts (plan 08):
+    - **Recipients:** "All registered apps" follows the registry until publication. A scheduled "All apps" broadcast also reaches apps registered before its publish time, so Resolve schedules publication itself. "Selected apps" stays the reviewed list.
+    - **Content only:** Resolve pushes a banner's content (type of notice, title, message, link, surfaces, expiry). The Quackback fork's banner widgets own its presentation: styles, icons, ordering and dismissal.
+    - **Partial delivery:** review lists unready apps and why; publishing to only the ready apps needs explicit confirmation. Blocked apps are recorded as not delivered and can be retried after repair.
 
 - Initial-release operator workflows are limited to chats and tickets. Feedback, roadmap and changelog views/actions are excluded, including feedback triage/merge and changelog publishing.
 

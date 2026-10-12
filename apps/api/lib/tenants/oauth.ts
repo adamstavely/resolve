@@ -36,8 +36,12 @@ export const connectRedirectUri = () => `${config().RESOLVE_ORIGIN}/api/connect/
  * Scopes to request from a tenant: only what the user's capabilities need (an observer gets read scopes only),
  * limited to the tenant's vocabulary. Proposed scopes the fork lacks are not requested.
  */
-export function tenantScopes(capabilities: Iterable<CapabilityId>): string[] {
- const supported = new Set<string>(QUACKBACK_SCOPES);
+/**
+ * Scopes to request: only what the held capabilities need, and only scopes the tenant knows. Fork scopes are always
+ * known; proposed ones (e.g. the announcement scopes of QB-ANN-1) are requested once the tenant advertises them.
+ */
+export function tenantScopes(capabilities: Iterable<CapabilityId>, advertised: readonly string[] = []): string[] {
+ const supported = new Set<string>([...QUACKBACK_SCOPES, ...advertised]);
  return ['openid', 'offline_access', ...scopesFor(capabilities).filter(s => supported.has(s))];
 }
 

@@ -44,7 +44,7 @@ export const CAPABILITIES = {
  'app.activate': { summary: 'Activate a validated instance for normal routing', kind: 'administration', confirmation: 'confirm', tools: [], jobs: ['activate'], phase: 4 },
  'app.lifecycle': { summary: 'Suspend and resume instances', kind: 'administration', confirmation: 'confirm', tools: [], jobs: ['suspend', 'resume'], phase: 4 },
  'roles.manage': { summary: 'Role bundles and per-app team mappings', kind: 'administration', confirmation: 'review', tools: [], jobs: ['apply_entitlements'], phase: 4 },
- 'broadcast.publish': { summary: 'Publish Everyone banners to all or selected apps', kind: 'mutation', confirmation: 'review', tools: ['list_announcements', 'upsert_announcement', 'archive_announcement'], jobs: [], phase: 5 },
+ 'broadcast.publish': { summary: 'Publish Everyone banners to all or selected apps', kind: 'mutation', confirmation: 'review', tools: ['list_announcements', 'upsert_announcement', 'archive_announcement', 'get_announcement_by_key'], jobs: [], phase: 5 },
  'audit.read': { summary: 'Read Resolve operation audit', kind: 'read', confirmation: 'none', tools: [], jobs: [], phase: 1 },
  'users.manage': { summary: 'Find people and apply or lift an emergency access block', kind: 'administration', confirmation: 'confirm', tools: [], jobs: [], phase: 1 },
 } as const satisfies Record<string, Capability>;

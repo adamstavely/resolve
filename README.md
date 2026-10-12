@@ -34,7 +34,8 @@ through the IdP session without a second prompt. Home then shows KPIs and activi
 `curl -X POST -d '{"text":"Hello"}' http://127.0.0.1:3301/dev/customer-message`. To simulate a directory change:
 `curl -X POST -H "Authorization: Bearer $DIRECTORY_TOKEN" -d '{"active":false}' http://127.0.0.1:3200/dev/users/mock%7Cbea/active`.
 As Ada (admin), **Administration → Applications → Register application** onboards a new instance (or adopts the unbound
-Travel Desk) through the mock fleet worker; **People and roles** manages bundles. `npm run dev` also starts the fleet job
+Travel Desk) through the mock fleet worker; **People and roles** manages bundles. As Bea, **Announcements** publishes banner content to all or selected apps
+(each app draws it in its own banner style; see `http://127.0.0.1:3301/portal`). `npm run dev` also starts the fleet job
 dispatcher (`npm run dev:jobs`). Stream load test: `npm run load:stream -- --sessions 100` (see phase 3 evidence).
 
 ```sh
@@ -46,7 +47,7 @@ QUACKBACK_SRC=../quackback npm run test:contract   # tool inventory vs. the pinn
 
 Evidence: [component gate](docs/evidence/phase-0-component-gate.md),
 [contracts and tool inventory](docs/evidence/phase-0-contracts.md), [identity and connections](docs/evidence/phase-1-identity.md), [fleet read](docs/evidence/phase-2-fleet-read.md), [operator actions](docs/evidence/phase-3-operator-actions.md),
-[fleet administration](docs/evidence/phase-4-fleet-administration.md).
+[fleet administration](docs/evidence/phase-4-fleet-administration.md), [banner broadcasts](docs/evidence/phase-5-banner-broadcasts.md).
 
 `/api/readiness` reports ready only when the API has `DATABASE_URL` and the latest migration is applied.
 

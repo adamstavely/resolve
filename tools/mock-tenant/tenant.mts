@@ -27,6 +27,8 @@ export interface TenantConfig {
  fixturePeople?: boolean;
  image?: string;
  settings?: Record<string, string>;
+ /** The host application has the banner embed script installed (the tenant has seen it load). */
+ embedInstalled?: boolean;
 }
 export type TenantState = 'provisioning' | 'maintenance' | 'active' | 'suspended';
 export interface Entitlement { version: number; payloadHash: string; status: 'active' | 'denied'; role: 'admin' | 'agent' | 'observer' | 'portal'; teams: string[] }
@@ -49,10 +51,12 @@ export interface Tenant {
  /** Bound to Resolve through an adopt job (its existing data, sign-in and unmanaged roles are left as they were). */
  adopted: boolean;
  data: TenantData; store: TenantStore;
+ announcements: Announcements;
+ embedInstalled: boolean;
  stats: { toolCalls: number; protocolCalls: number };
- people: { sub: string; name: string; role: Viewer['role']; teams: string[] }[];
+ people: { sub: string; name: string; role: Viewer['role']; teams: string[]; announcements?: boolean }[];
  userFor(idpIss: string, idpSub: string, name: string): TenantUser;
- viewer(tenantUserId: string): Viewer & { denied: boolean; managed: boolean };
+ viewer(tenantUserId: string): Viewer & { denied: boolean; managed: boolean; announcer: boolean };
  /** In-process tool call for the worker's probes (bypasses HTTP, not authorization). */
  probe(tenantUserId: string | null, tool: string, args: Record<string, unknown>): { ok: boolean; code?: string };
  revokeTokensFor(idpIss: string, idpSub: string): void;
@@ -61,19 +65,24 @@ export interface Tenant {
 
 export interface FleetContext {
  idp: string; resolveRedirect: string;
- people: Record<string, { role: Viewer['role']; teams: string[]; roles?: Record<string, Viewer['role']> }>;
+ /** `announcements`: may manage announcements without a staff role (announcement.manage). */
+ people: Record<string, { role: Viewer['role']; teams: string[]; roles?: Record<string, Viewer['role']>; announcements?: boolean }>;
  names: Record<string, string>;
 }
 
-const SUPPORTED_SCOPES = ['openid', 'offline_access', 'read:feedback', 'write:feedback', 'write:changelog', 'read:article', 'write:article', 'read:chat', 'write:chat', 'read:settings', 'write:settings'];
+const SUPPORTED_SCOPES = ['openid', 'offline_access', 'read:feedback', 'write:feedback', 'write:changelog', 'read:article', 'write:article', 'read:chat', 'write:chat', 'read:settings', 'write:settings',
+ // Proposed for QB-ANN-1 (the fork has no announcement scope yet).
+ 'read:announcement', 'write:announcement'];
+const ANNOUNCEMENT_SCOPES: Record<string, string> = { list_announcements: 'read:announcement', get_announcement_by_key: 'read:announcement', upsert_announcement: 'write:announcement', archive_announcement: 'write:announcement' };
 const ACCESS_SECONDS = 300;
 export const WRITE_TOOLS = new Set(['reply_to_conversation', 'add_conversation_note', 'assign_conversation', 'set_conversation_status', 'mark_conversation_read', 'reply_to_ticket', 'add_ticket_note', 'assign_ticket', 'set_ticket_status',
- 'upload_file', 'signal_activity', 'set_availability']);
+ 'upload_file', 'signal_activity', 'set_availability', 'upsert_announcement', 'archive_announcement']);
 export const PROTOCOL_TOOLS = {
  list_tickets: 2, get_ticket: 2, list_conversations: 2, get_conversation: 2, get_support_dashboard: 1, list_support_activity: 1,
  reply_to_conversation: 2, add_conversation_note: 1, assign_conversation: 1, set_conversation_status: 2, mark_conversation_read: 1,
  reply_to_ticket: 2, add_ticket_note: 2, assign_ticket: 1, set_ticket_status: 1, get_operation_result: 1, list_changes: 1,
  upload_file: 2, get_attachment: 1, signal_activity: 1, get_conversation_activity: 1, get_availability: 1, set_availability: 1,
+ list_announcements: 1, upsert_announcement: 1, archive_announcement: 1, get_announcement_by_key: 1,
 };
 
 const b64url = (b: Buffer) => b.toString('base64url');
@@ -117,7 +126,7 @@ export async function startTenant(t: TenantConfig, ctx: FleetContext, image: str
  };
 
  // Fixture people (unmanaged) keep their configured roles; a provisioned instance starts with nobody.
- const people = t.fixturePeople === false ? [] : Object.entries(ctx.people).map(([sub, p]) => ({ sub, name: ctx.names[sub] ?? sub, role: p.roles?.[t.appKey] ?? p.role, teams: p.teams }));
+ const people = t.fixturePeople === false ? [] : Object.entries(ctx.people).map(([sub, p]) => ({ sub, name: ctx.names[sub] ?? sub, role: p.roles?.[t.appKey] ?? p.role, teams: p.teams, announcements: !!p.announcements }));
  for (const p of people) userFor(ctx.idp, p.sub, p.name);
  const fixtureStaff = people.filter(p => p.role === 'agent').map(p => ({ principalId: userFor(ctx.idp, p.sub, p.name).principalId, name: p.name }));
  const staff = [...fixtureStaff, { principalId: 'principal_priya', name: 'Priya Shah' }, { principalId: 'principal_tom', name: 'Tom Okafor' }];
@@ -137,18 +146,18 @@ export async function startTenant(t: TenantConfig, ctx: FleetContext, image: str
   settings: { 'auth.sso': 'company-idp', 'portal.access': 'intranet-sso', 'anonymous.actions': 'off', 'widget.hmac': 'on', 'announcements.audience': 'authenticated', ...(t.settings ?? {}) },
   resolveClient: t.resolveClient ?? null,
   pilots: new Set(), entitlements: new Map(), mailbox: null, configRevision: null, createdByWorker: false, adopted: false,
-  data, store, stats, people, userFor,
+  data, store, stats, people, userFor, announcements: new Announcements(t.appKey), embedInstalled: t.embedInstalled ?? false,
   viewer(tenantUserId) {
    const u = known.get(tenantUserId);
    const ent = u && tenant.entitlements.get(`${u.idpIss}|${u.idpSub}`);
    const analytics = (role: string) => t.analyticsRoles.includes(role);
    if (ent) {
     const role = ent.status === 'denied' ? 'portal' : ent.role;
-    return { principalId: u!.principalId, role, teams: ent.status === 'denied' ? [] : ent.teams, analytics: analytics(role), denied: ent.status === 'denied', managed: true };
+    return { principalId: u!.principalId, role, teams: ent.status === 'denied' ? [] : ent.teams, analytics: analytics(role), denied: ent.status === 'denied', managed: true, announcer: ent.status !== 'denied' && role === 'admin' };
    }
    const p = u && people.find(x => x.sub === u.idpSub && u.idpIss === ctx.idp);
-   if (!p) return { principalId: u?.principalId ?? 'principal_' + tenantUserId.slice(5), role: 'portal', teams: [], analytics: false, denied: false, managed: false };
-   return { principalId: u!.principalId, role: p.role, teams: p.teams, analytics: analytics(p.role), denied: false, managed: false };
+   if (!p) return { principalId: u?.principalId ?? 'principal_' + tenantUserId.slice(5), role: 'portal', teams: [], analytics: false, denied: false, managed: false, announcer: false };
+   return { principalId: u!.principalId, role: p.role, teams: p.teams, analytics: analytics(p.role), denied: false, managed: false, announcer: p.role === 'admin' || !!p.announcements };
   },
   probe(tenantUserId, tool, args) {
    if (!tenantUserId) return { ok: false, code: 'UNAUTHENTICATED' };
@@ -181,14 +190,16 @@ export async function startTenant(t: TenantConfig, ctx: FleetContext, image: str
   const reply = (result: unknown) => send(res, 200, { jsonrpc: '2.0', id: rpc.id ?? null, result });
   if (rpc.method !== 'tools/call') return send(res, 200, { jsonrpc: '2.0', id: rpc.id ?? null, error: { code: -32601, message: 'Method not found' } });
   const tool = String(rpc.params?.name);
-  const needed = WRITE_TOOLS.has(tool) ? 'write:chat' : 'read:chat';
+  const needed = ANNOUNCEMENT_SCOPES[tool] ?? (WRITE_TOOLS.has(tool) ? 'write:chat' : 'read:chat');
   if (!String(payload.scope).split(' ').includes(needed)) {
    res.writeHead(403, { 'WWW-Authenticate': `Bearer error="insufficient_scope", scope="${needed}"`, 'Content-Type': 'application/json' });
    return res.end(JSON.stringify({ error: 'insufficient_scope' }));
   }
   const viewer = tenant.viewer(String(payload.sub));
   if (viewer.denied) return reply({ isError: true, content: [{ type: 'text', text: 'Error: FORBIDDEN: Your access to this application has been withdrawn.' }] });
-  if (viewer.role === 'portal') return reply({ isError: true, content: [{ type: 'text', text: 'Error: This operation requires a team member (admin or member) role.' }] });
+  if (tool in ANNOUNCEMENT_SCOPES) {
+   if (!viewer.announcer) return reply({ isError: true, content: [{ type: 'text', text: 'Error: FORBIDDEN: Managing announcements requires announcement.manage.' }] });
+  } else if (viewer.role === 'portal') return reply({ isError: true, content: [{ type: 'text', text: 'Error: This operation requires a team member (admin or member) role.' }] });
   try {
    const args = rpc.params?.arguments ?? {};
    let result: unknown;
@@ -202,7 +213,8 @@ export async function startTenant(t: TenantConfig, ctx: FleetContext, image: str
      if (!admitted(String(payload.sub))) return send(res, 503, { error: 'not_routable', state: tenant.state });
      result = store.changes(viewer, after);
     }
-   } else result = store.call(viewer, tool, args) ?? callTool(data, viewer, tool, args);
+   } else if (tool in ANNOUNCEMENT_SCOPES) result = tenant.announcements.call(tool, args, nameOf(viewer.principalId), tenant.embedInstalled);
+   else result = store.call(viewer, tool, args) ?? callTool(data, viewer, tool, args);
    // Fault injection: the write committed, but the response is lost.
    if (failMode === 'drop' && WRITE_TOOLS.has(tool)) { res.socket?.destroy(); return; }
    reply({ content: [{ type: 'text', text: JSON.stringify(result) }] });
@@ -334,6 +346,10 @@ export async function startTenant(t: TenantConfig, ctx: FleetContext, image: str
    if (req.method === 'POST' && url.pathname === '/dev/visitor-activity') { const b = JSON.parse(await body(req)); return send(res, 200, store.visitorActivity(String(b.conversationId), b)); }
    if (req.method === 'GET' && url.pathname === '/dev/activity') return send(res, 200, store.rawActivity(url.searchParams.get('conversationId') ?? ''));
    if (req.method === 'GET' && url.pathname === '/dev/availability') return send(res, 200, store.availabilityByName());
+   if (req.method === 'GET' && url.pathname === '/dev/announcements') return send(res, 200, tenant.announcements.dump());
+   const edit = url.pathname.match(/^\/dev\/announcements\/([^/]+)\/edit$/);
+   if (req.method === 'POST' && edit) return send(res, 200, tenant.announcements.localEdit(decodeURIComponent(edit[1])));
+   if (req.method === 'GET' && url.pathname === '/portal') return send(res, 200, tenant.announcements.portal(t.displayName));
    if (req.method === 'GET' && url.pathname === '/dev/entitlements') return send(res, 200, Object.fromEntries([...tenant.entitlements].map(([k, e]) => [k.slice(k.indexOf('|') + 1), e])));
    if (req.method === 'POST' && url.pathname === '/dev/fail') {
     const { mode, sub } = JSON.parse(await body(req));
@@ -351,4 +367,86 @@ export async function startTenant(t: TenantConfig, ctx: FleetContext, image: str
  await new Promise<void>(r => server.listen(t.port, '127.0.0.1', () => r()));
  console.log(`Mock tenant ${t.appKey} at ${origin} (${tenant.state}${tenant.bound ? '' : ', unbound'})`);
  return tenant;
+}
+
+// ── Announcements (target tools for QB-ANN-1/2) ──
+
+interface AnnouncementRecord {
+ id: string; keys: string[]; payloadHash: string; version: number; archived: boolean; author: string; content: Record<string, unknown> & { title: string; body: string | null; kind: string; surfaces: string[]; expiresAt: string | null; linkUrl: string | null; linkLabel: string | null };
+ /** Tenant-side writes for this announcement (tests check one revision is one mutation). */
+ mutations: number;
+}
+const escapeHtml = (s: string) => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+
+/** Keyed, version-checked announcements with the Everyone ('authenticated') audience only. */
+export class Announcements {
+ private byId = new Map<string, AnnouncementRecord>();
+ private byKey = new Map<string, AnnouncementRecord>();
+ constructor(private readonly appKey: string) {}
+
+ call(tool: string, a: Record<string, unknown>, author: string, embedInstalled: boolean) {
+  const surfacesOf = (r: AnnouncementRecord) => ({ portal: r.content.surfaces.includes('portal') ? 'published' : 'not_requested', embed: !r.content.surfaces.includes('embed') ? 'not_requested' : embedInstalled ? 'published' : 'not_installed' });
+  switch (tool) {
+   case 'list_announcements':
+    return { announcements: [...this.byId.values()].filter(r => a.includeArchived || !r.archived).map(r => ({ announcementId: r.id, title: r.content.title, kind: r.content.kind, archived: r.archived, version: r.version, broadcastKey: r.keys.at(-1) ?? null })) };
+   case 'get_announcement_by_key': {
+    const r = this.byKey.get(String(a.broadcastKey));
+    return r ? { state: 'committed', announcementId: r.id, payloadHash: r.payloadHash, version: r.version, archived: r.archived, surfaces: surfacesOf(r) } : { state: 'unknown' };
+   }
+   case 'upsert_announcement': {
+    const key = String(a.broadcastKey), hash = String(a.payloadHash);
+    const content = a.announcement as AnnouncementRecord['content'] & { audience: { tier: string; segmentIds: string[] } };
+    if (content.audience?.tier !== 'authenticated' || content.audience.segmentIds?.length) throw new ToolError('INVALID_ARGUMENT', 'Fleet broadcasts use the Everyone (authenticated) audience only');
+    const prior = this.byKey.get(key);
+    if (prior) {
+     // Replay: the same key and payload returns the original result; never a second announcement.
+     if (prior.payloadHash !== hash) throw new ToolError('OPERATION_CONFLICT', 'This broadcast key was used for different content');
+     return { announcementId: prior.id, version: prior.version, replayed: true, surfaces: surfacesOf(prior) };
+    }
+    let r: AnnouncementRecord;
+    if (a.announcementId) {
+     const existing = this.byId.get(String(a.announcementId));
+     if (!existing) throw new ToolError('NOT_FOUND', 'Announcement not found');
+     if (existing.version !== a.expectedVersion) throw new ToolError('CONFLICT', `Announcement changed here (version ${existing.version}); not overwritten`);
+     r = existing; r.content = content; r.payloadHash = hash; r.version++; r.mutations++; r.archived = false;
+    } else {
+     r = { id: `ann_${this.appKey}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, keys: [], payloadHash: hash, version: 1, archived: false, author, content, mutations: 1 };
+     this.byId.set(r.id, r);
+    }
+    r.keys.push(key); this.byKey.set(key, r);
+    return { announcementId: r.id, version: r.version, replayed: false, surfaces: surfacesOf(r) };
+   }
+   case 'archive_announcement': {
+    const r = this.byId.get(String(a.announcementId));
+    if (!r) throw new ToolError('NOT_FOUND', 'Announcement not found');
+    if (r.version !== a.expectedVersion) throw new ToolError('CONFLICT', `Announcement changed here (version ${r.version}); not archived`);
+    if (!r.archived) { r.archived = true; r.version++; r.mutations++; }
+    return { announcementId: r.id, version: r.version, archived: true };
+   }
+  }
+  throw new ToolError('NOT_FOUND', 'Unknown tool');
+ }
+
+ /** Development: an administrator edits the announcement inside the application. */
+ localEdit(id: string) { const r = this.byId.get(id); if (!r) return { error: 'NOT_FOUND' }; r.version++; r.content = { ...r.content, title: r.content.title + ' (edited here)' }; return { id, version: r.version }; }
+ dump() { return [...this.byId.values()].map(r => ({ id: r.id, keys: r.keys, title: r.content.title, version: r.version, archived: r.archived, author: r.author, mutations: r.mutations, surfaces: r.content.surfaces })); }
+
+ /**
+  * Development stand-in for the fork's portal banner strip. Presentation is the application's (the fork maps `kind`
+  * to its own styles, `kind-styles.ts`); this mock only imitates that, Resolve sends no styling.
+  */
+ portal(name: string) {
+  const now = Date.now();
+  const active = [...this.byId.values()].filter(r => !r.archived && r.content.surfaces.includes('portal') && (!r.content.expiresAt || Date.parse(r.content.expiresAt) > now))
+   .sort((x, y) => ['critical', 'warning', 'maintenance', 'info', 'success'].indexOf(x.content.kind) - ['critical', 'warning', 'maintenance', 'info', 'success'].indexOf(y.content.kind));
+  const banners = active.map(r => `<section class="banner" data-kind="${escapeHtml(r.content.kind)}" aria-label="${escapeHtml(r.content.kind)} announcement">
+<p><strong>${escapeHtml(r.content.title)}</strong>${r.content.body ? ` ${escapeHtml(r.content.body)}` : ''}${r.content.linkUrl ? ` <a href="${escapeHtml(r.content.linkUrl)}">${escapeHtml(r.content.linkLabel ?? r.content.linkUrl)}</a>` : ''}</p>
+<button type="button" onclick="this.closest('section').remove()">Dismiss<span class="sr"> ${escapeHtml(r.content.title)}</span></button></section>`).join('');
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(name)} support</title>
+<style>body{font:16px/1.5 system-ui,sans-serif;margin:0;color:#16181d;background:#fafafb}main{max-width:48rem;margin:1rem auto;padding:0 1rem}
+.banner{display:flex;gap:1rem;align-items:center;justify-content:space-between;border:1px solid #7c8390;border-left:6px solid #3b5bff;border-radius:8px;padding:.5rem 1rem;margin:.5rem 0;background:#fff}
+.banner[data-kind=critical]{border-left-color:#b42318}.banner[data-kind=warning]{border-left-color:#8f5d00}.banner p{margin:0}
+.banner button{font:inherit;min-height:44px;padding:0 1rem;border-radius:8px;border:1px solid #7c8390;background:#fff}.sr{position:absolute;left:-9999px}
+:focus-visible{outline:3px solid #3b5bff;outline-offset:2px}</style></head><body><main><h1>${escapeHtml(name)} support</h1>${banners || '<p>No announcements.</p>'}</main></body></html>`;
+ }
 }

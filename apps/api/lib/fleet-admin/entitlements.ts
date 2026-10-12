@@ -4,6 +4,7 @@ import { canonicalJson, type TenantRole } from '@resolve/contracts';
 import { transaction, type Queryable } from '../db';
 import { writeAudit } from '../audit';
 import { getJob, resumeJob, submitJob } from './worker-client';
+import { rawRegistryApp } from '../registry';
 
 /*
  * Desired-state entitlements (plan 02). For each person and each app with team mappings, Resolve computes the tenant
@@ -45,7 +46,8 @@ async function recompute(tx: Queryable, userId: string, appKey: string): Promise
   [userId, appKey, version, JSON.stringify(e), payloadHash]);
  // Older queued jobs for this person/app are obsolete now.
  await tx.query(`UPDATE entitlement_jobs SET status = 'superseded', updated_at = now() WHERE user_id = $1 AND app_key = $2 AND status = 'queued'`, [userId, appKey]);
- await tx.query('INSERT INTO entitlement_jobs (user_id, app_key, version, payload_hash) VALUES ($1, $2, $3, $4)', [userId, appKey, version, payloadHash]);
+ // A concurrent recompute may have queued the same version and payload already.
+ await tx.query('INSERT INTO entitlement_jobs (user_id, app_key, version, payload_hash) VALUES ($1, $2, $3, $4) ON CONFLICT (user_id, app_key, version) DO NOTHING', [userId, appKey, version, payloadHash]);
  await writeAudit(tx, { actorUserId: null, operation: 'entitlement.desired', outcome: 'succeeded', summary: { executor: 'resolve', userId, app: appKey, version, status: e.status, role: e.role } });
  return version;
 }
@@ -139,6 +141,13 @@ export async function processJob(db: Pick<Pool, 'connect'> & Queryable, job: Cla
    (SELECT subject FROM identities i WHERE i.user_id = e.user_id ORDER BY last_login_at DESC NULLS LAST LIMIT 1) AS subject
   FROM user_entitlements e WHERE e.user_id = $1 AND e.app_key = $2`, [job.user_id, job.app_key])).rows[0];
  if (!latest || Number(latest.desired_version) > Number(job.version)) { await complete(db, job, { status: 'superseded' }); return 'superseded'; }
+ // An app the fleet does not list (still being created, or gone) cannot take it yet: wait without a worker round trip.
+ if (!(await rawRegistryApp(job.app_key).catch(() => undefined))) {
+  const attempts = Number(job.attempts);
+  // Short, fixed wait: a new instance appears in the registry within seconds of being created.
+  await complete(db, job, attempts >= MAX_ATTEMPTS ? { status: 'failed', error: 'NOT_REGISTERED' } : { status: 'queued', retryInSeconds: 1 });
+  return attempts >= MAX_ATTEMPTS ? 'failed' : 'retry';
+ }
  let workerJobId = job.worker_job_id;
  if (!workerJobId) {
   const o = await submitJob({

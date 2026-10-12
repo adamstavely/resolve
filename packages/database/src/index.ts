@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { Pool } from 'pg';
 
 /** Highest migration in packages/database/migrations; readiness requires it (checked by a unit test). */
-export const LATEST_MIGRATION = '0006';
+export const LATEST_MIGRATION = '0007';
 
 export async function migrate(connectionString: string, migrations: {version:string; sql:string}[]) {
  const pool = new Pool({connectionString, max:1}); const client = await pool.connect();

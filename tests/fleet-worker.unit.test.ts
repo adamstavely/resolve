@@ -99,7 +99,8 @@ describe('mock fleet worker', () => {
   tenant.configRevision = hex('e');
   const v = w.submit({ ...envelope({ desiredStateVersion: 10 }), command: 'validate', parameters: { configRevision: hex('e') } });
   const validated = await settle(w, (v.body as JobStatus).jobId);
-  const act = (image: string, rev = hex('e')) => w.submit({ ...envelope({ desiredStateVersion: 11 + Math.floor(Math.random() * 1000) }), command: 'activate', parameters: { configRevision: rev, testedImage: image, validationJobId: validated.jobId } });
+  let version = 10;
+  const act = (image: string, rev = hex('e')) => w.submit({ ...envelope({ desiredStateVersion: ++version }), command: 'activate', parameters: { configRevision: rev, testedImage: image, validationJobId: validated.jobId } });
   // Whatever validation concluded, activating a different image or revision is refused.
   w.setImage('sha256:' + hex('f'));
   const stale = act(IMAGE);

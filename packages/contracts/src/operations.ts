@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { appKeySchema, isoDateTimeSchema, uuidSchema } from './common';
+import { announcementToolArgs, announcementToolResults } from './broadcasts';
 
 /*
  * Phase 3 operator actions (plan 00, plan 09, plan 10). Target tenant action tools, the change feed, and
@@ -25,6 +26,10 @@ export const ACTION_TOOL_VERSIONS = {
  get_conversation_activity: 1, // who is viewing/typing, customer online (QB-CHAT-8)
  get_availability: 1,       // explicit agent availability, separate from monitoring (QB-CHAT-3)
  set_availability: 1,
+ list_announcements: 1,     // QB-ANN-1
+ upsert_announcement: 1,    // keyed by broadcast delivery key + payload hash (QB-ANN-1/2)
+ archive_announcement: 1,   // version-checked against local edits
+ get_announcement_by_key: 1,// reconcile an uncertain publication (QB-ANN-2)
 } as const;
 export type ActionTool = keyof typeof ACTION_TOOL_VERSIONS;
 
@@ -72,6 +77,7 @@ export const actionToolArgs = {
  get_conversation_activity: z.strictObject({ conversationId: z.string() }),
  get_availability: z.strictObject({}),
  set_availability: z.strictObject({ status: z.enum(AVAILABILITY) }),
+ ...announcementToolArgs,
 };
 
 const messageResult = z.object({ messageId: z.string(), createdAt: isoDateTimeSchema, operationKey: key, replayed: z.boolean() });
@@ -116,6 +122,7 @@ export const actionToolResults = {
  get_conversation_activity: conversationActivitySchema,
  get_availability: availabilityResult,
  set_availability: availabilityResult,
+ ...announcementToolResults,
 };
 
 // ── Resolve operation API ──

@@ -38,12 +38,16 @@ async function allTickets(page: Page, app: string) {
 test('KPI totals cover reporting apps only and name the missing ones', async ({ browser }) => {
  const sam = await signedIn(browser, 'Sam Agent', ['payroll', 'hr']);
  const d = await getJson(sam, '/api/dashboard');
- expect(d.apps.map((a: { appKey: string; status: string; reason?: string }) => `${a.appKey}:${a.reason ?? a.status}`)).toEqual(['payroll:ok', 'hr:ok', 'facilities:suspended', 'legal:dormant']);
- expect(d.totals.openTickets.included).toEqual(['payroll', 'hr']);
- expect(d.totals.openTickets.missing).toEqual([{ appKey: 'facilities', reason: 'suspended' }, { appKey: 'legal', reason: 'dormant' }]);
+ // Other specs onboard more apps into the same mock fleet; check the fixture apps and derive the totals.
+ const FIXTURE = ['payroll', 'hr', 'facilities', 'legal'];
+ expect(d.apps.filter((a: { appKey: string }) => FIXTURE.includes(a.appKey)).map((a: { appKey: string; status: string; reason?: string }) => `${a.appKey}:${a.reason ?? a.status}`))
+  .toEqual(['payroll:ok', 'hr:ok', 'facilities:suspended', 'legal:dormant']);
+ expect(d.totals.openTickets.included.filter((k: string) => FIXTURE.includes(k))).toEqual(['payroll', 'hr']);
+ expect(d.totals.openTickets.missing.filter((m: { appKey: string }) => FIXTURE.includes(m.appKey))).toEqual([{ appKey: 'facilities', reason: 'suspended' }, { appKey: 'legal', reason: 'dormant' }]);
  const tile = sam.getByRole('listitem').filter({ hasText: 'Open tickets' });
  await expect(tile).toContainText(String(d.totals.openTickets.value));
- await expect(tile).toContainText('2 of 4 applications · Facilities suspended, Legal Ops idle');
+ await expect(tile).toContainText(`${d.totals.openTickets.included.length} of ${d.apps.length} applications · Facilities suspended`);
+ await expect(tile).toContainText('Legal Ops idle');
  expect((await new AxeBuilder({ page: sam }).withTags(tags).analyze()).violations).toEqual([]);
  await sam.context().close();
 });

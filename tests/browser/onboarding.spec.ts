@@ -1,6 +1,6 @@
-import { test, expect, type Browser, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { signInAs } from './helpers';
+import { ORIGIN, H, tags, key, fleet, tenantPort, signedIn, me, runOf, waitRun, draft, reviewAndProvision, connected, pilotCheck, activate, onboarded } from './fleet-helpers';
 
 /*
  * Phase 4 exit criteria (plan 00) against the mock fleet and worker: maintenance-only validation before activation,
@@ -9,74 +9,7 @@ import { signInAs } from './helpers';
  */
 // Each test provisions, validates and activates real (mock) instances through the worker.
 test.describe.configure({ timeout: 120_000 });
-const ORIGIN = 'http://127.0.0.1:4200';
-const FLEET = 'http://127.0.0.1:3300';
-const tags = ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'];
-const key = (p: string) => `${p}${Math.random().toString(36).slice(2, 7)}`;
-const H = { Origin: ORIGIN };
-const fleet = (path: string, body?: unknown) => fetch(FLEET + path, body === undefined ? {} : { method: 'POST', body: JSON.stringify(body) }).then(r => r.json());
-const tenantPort = async (appKey: string) => ((await fleet('/dev/fleet')) as { appKey: string; port: number }[]).find(t => t.appKey === appKey)!.port;
 
-async function signedIn(browser: Browser, name: string) {
- const ctx = await browser.newContext({ baseURL: ORIGIN });
- const page = await ctx.newPage();
- await signInAs(page, name);
- await expect(page.getByText(`Signed in as ${name}`)).toBeVisible();
- return page;
-}
-async function me(page: Page) { return (await (await page.request.get('/api/session')).json()).user as { id: string; displayName: string }; }
-async function runOf(page: Page, runId: string) { return (await (await page.request.get(`/api/admin/onboarding/${runId}`)).json()).run; }
-async function waitRun(page: Page, runId: string, until: (r: { status: string; jobs: { stage: string }[] }) => boolean) {
- let r;
- await expect.poll(async () => until(r = await runOf(page, runId)), { timeout: 20_000 }).toBe(true);
- return r!;
-}
-
-/** Steps 1–4 through the API (the wizard itself is exercised in the first test). */
-async function draft(admin: Page, appKey: string, opts: { adopt?: string; mappings?: unknown[]; pilots?: string[] } = {}) {
- const start = await admin.request.post('/api/admin/onboarding', { headers: H, data: { describe: {
-  name: `App ${appKey}`, key: appKey, description: '', appUrl: `https://${appKey}.corp.internal`, environment: 'production', ownerName: 'Owner', ownerEmail: 'owner@example.test', supportTeam: 'Support', contact: '' } } });
- expect(start.status()).toBe(201);
- const { runId } = await start.json();
- const put = async (step: string, data: unknown) => {
-  const r = await admin.request.put(`/api/admin/onboarding/${runId}/steps/${step}`, { headers: H, data: { data, version: (await runOf(admin, runId)).version } });
-  expect(r.status(), await r.text()).toBe(200);
- };
- await put('instance', opts.adopt ? { strategy: 'adopt', workspaceKey: opts.adopt, mailSlug: appKey } : { strategy: 'create', supportHostname: `${appKey}.support.corp.internal`, mailSlug: appKey });
- await put('access', { teamMappings: opts.mappings ?? [{ bundle: 'fleet-admin', role: 'admin', teams: [] }, { bundle: 'fleet-agent', role: 'agent', teams: ['support'] }], pilotUserIds: opts.pilots ?? [(await me(admin)).id] });
- await put('entry', { emailAddress: `${appKey}@support.corp.internal`, emailOwner: 'Support', banner: false });
- return runId as string;
-}
-async function reviewAndProvision(admin: Page, runId: string) {
- const review = await (await admin.request.post(`/api/admin/onboarding/${runId}/review`, { headers: H, data: {} })).json();
- const r = await admin.request.post(`/api/admin/onboarding/${runId}/provision`, { headers: H, data: { configRevision: review.configRevision, requestId: crypto.randomUUID() } });
- expect(r.status(), await r.text()).toBe(202);
- return review.configRevision as string;
-}
-const connected = (page: Page) => expect(page.getByText(/^Connected to /)).toBeVisible();
-async function pilotCheck(pilot: Page, runId: string, workspaceKey: string) {
- await pilot.goto(`/api/connect/${workspaceKey}/start`);
- await connected(pilot);
- const r = await pilot.request.post(`/api/onboarding/${runId}/pilot`, { headers: H, data: {} });
- expect((await r.json()).passed).toBe(true);
-}
-async function activate(admin: Page, runId: string) {
- const run = await runOf(admin, runId);
- const v = run.jobs.find((j: { command: string }) => j.command === 'provision' || j.command === 'validate');
- const r = await admin.request.post(`/api/admin/onboarding/${runId}/activate`, { headers: H, data: { configRevision: run.configRevision, requestId: crypto.randomUUID(), validationJobId: v.id } });
- expect(r.status(), await r.text()).toBe(202);
- return waitRun(admin, runId, x => x.status === 'active');
-}
-/** A fully onboarded, active application (create strategy), with Ada as admin and pilot. */
-async function onboarded(admin: Page, prefix: string, mappings?: unknown[]) {
- const appKey = key(prefix);
- const runId = await draft(admin, appKey, { mappings });
- await reviewAndProvision(admin, runId);
- await waitRun(admin, runId, r => r.status === 'ready');
- await pilotCheck(admin, runId, appKey);
- await activate(admin, runId);
- return { appKey, runId };
-}
 
 test('an admin registers and onboards an application through the wizard, and it opens only after validation and a pilot check', async ({ browser }) => {
  const ada = await signedIn(browser, 'Ada Admin');
@@ -265,7 +198,8 @@ test('role changes reach the tenant as versioned entitlements, and a blocked per
  const { appKey } = await onboarded(ada, 'ent', [{ bundle: 'fleet-admin', role: 'admin', teams: [] }, { bundle: 'fleet-agent', role: 'agent', teams: ['support'] }]);
  const port = await tenantPort(appKey);
  const ent = async (sub: string) => (await (await fetch(`http://127.0.0.1:${port}/dev/entitlements`)).json())[sub];
- await expect.poll(() => ent('mock|bo').then(e => e?.role)).toBe('agent');
+ // Propagation goes through the shared entitlement queue (other apps' work may be ahead of it).
+ await expect.poll(() => ent('mock|bo').then(e => e?.role), { timeout: 20_000 }).toBe('agent');
  const v1 = (await ent('mock|bo')).version;
 
  // Mapping change: agents become observers here; Bo's tenant role follows with a newer version.
@@ -273,7 +207,7 @@ test('role changes reach the tenant as versioned entitlements, and a blocked per
  await ada.getByLabel('Role for fleet-agent').selectOption('observer');
  await ada.getByRole('button', { name: 'Save mappings' }).click();
  await expect(ada.getByText('Mappings saved')).toBeVisible();
- await expect.poll(() => ent('mock|bo').then(e => e?.role)).toBe('observer');
+ await expect.poll(() => ent('mock|bo').then(e => e?.role), { timeout: 20_000 }).toBe('observer');
  expect((await ent('mock|bo')).version).toBeGreaterThan(v1);
  expect((await new AxeBuilder({ page: ada }).withTags(tags).analyze()).violations).toEqual([]);
 
@@ -281,10 +215,15 @@ test('role changes reach the tenant as versioned entitlements, and a blocked per
  const users = (await (await ada.request.get('/api/admin/users?q=Bo')).json()).users;
  const bo = users.find((u: { displayName: string }) => u.displayName === 'Bo Blockable');
  expect((await ada.request.post(`/api/admin/users/${bo.id}/access`, { headers: H, data: { enabled: false, reason: 'Onboarding entitlement test' } })).status()).toBe(200);
- await expect.poll(() => ent('mock|bo').then(e => e?.status)).toBe('denied');
- const denied = (await ent('mock|bo')).version;
- expect((await ada.request.post(`/api/admin/users/${bo.id}/access`, { headers: H, data: { enabled: true, reason: 'Onboarding entitlement test done' } })).status()).toBe(200);
- await expect.poll(() => ent('mock|bo').then(e => e?.status)).toBe('active');
+ let denied: number;
+ try {
+  await expect.poll(() => ent('mock|bo').then(e => e?.status), { timeout: 20_000 }).toBe('denied');
+  denied = (await ent('mock|bo')).version;
+ } finally {
+  // Always restore Bo: other tests sign in as him.
+  expect((await ada.request.post(`/api/admin/users/${bo.id}/access`, { headers: H, data: { enabled: true, reason: 'Onboarding entitlement test done' } })).status()).toBe(200);
+ }
+ await expect.poll(() => ent('mock|bo').then(e => e?.status), { timeout: 20_000 }).toBe('active');
  expect((await ent('mock|bo')).version).toBeGreaterThan(denied);
  await ada.context().close();
 });

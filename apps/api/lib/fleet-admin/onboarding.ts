@@ -217,7 +217,7 @@ function requireRevision(run: RunRow, configRevision: string) {
 }
 const jobConflict = (r: StartResult) => {
  if (r.kind === 'conflict') fail(409, r.code, r.code === 'APP_BUSY' ? 'Another job is running for this application. Wait for it to finish.' : 'This request was already used for a different action.');
- return (r as { job: JobRow }).job;
+ return r as { kind: 'started' | 'existing'; job: JobRow };
 };
 
 /** Resolve's OAuth client at the tenant: generated here, sealed, and only its hash leaves Resolve. */
@@ -241,8 +241,9 @@ export async function provision(db: Pick<Pool, 'connect'> & Queryable, actorUser
  const parameters = instance.strategy === 'create'
   ? { strategy: 'create', supportHostname: instance.supportHostname, mailSlug: instance.mailSlug, configRevision: run.config_revision!, configuration: run.config!, oauthClient }
   : { strategy: 'adopt', mailSlug: instance.mailSlug, configRevision: run.config_revision!, configuration: run.config!, oauthClient, reportRevision: run.report_revision! };
- const job = jobConflict(await startJob(db, { appKey: binding.workspace_key, command: 'provision', parameters, runId: id, initiatorUserId: actorUserId, requestId: body.requestId, configRevision: run.config_revision }));
- if (job.stage === 'requested') {
+ const { kind, job } = jobConflict(await startJob(db, { appKey: binding.workspace_key, command: 'provision', parameters, runId: id, initiatorUserId: actorUserId, requestId: body.requestId, configRevision: run.config_revision }));
+ // Side effects belong to the request that created the job; a concurrent or repeated submit only redispatches.
+ if (kind === 'started') {
   // Managed roles for this instance: the reviewed mappings. Entitlement jobs apply them once the instance exists.
   await setMappings(db, binding.workspace_key, run.config!.teamMappings, null, actorUserId);
   await db.query(`UPDATE onboarding_runs SET status = 'provisioning', updated_at = now() WHERE id = $1`, [id]);
@@ -258,8 +259,8 @@ export async function validate(db: Pick<Pool, 'connect'> & Queryable, actorUserI
  if (!(await provisioned(db, id))) fail(409, 'NOT_PROVISIONED', 'Provision the instance first.');
  if (!['ready', 'failed', 'validating'].includes(run.status)) fail(409, 'INVALID_STATE', 'This run cannot be validated now.');
  const binding = (await db.query('SELECT workspace_key FROM instance_bindings WHERE id = $1', [run.binding_id])).rows[0];
- const job = jobConflict(await startJob(db, { appKey: binding.workspace_key, command: 'validate', parameters: { configRevision: run.config_revision! }, runId: id, initiatorUserId: actorUserId, requestId: body.requestId, configRevision: run.config_revision }));
- if (job.stage === 'requested') await db.query(`UPDATE onboarding_runs SET status = 'validating', updated_at = now() WHERE id = $1`, [id]);
+ const { kind, job } = jobConflict(await startJob(db, { appKey: binding.workspace_key, command: 'validate', parameters: { configRevision: run.config_revision! }, runId: id, initiatorUserId: actorUserId, requestId: body.requestId, configRevision: run.config_revision }));
+ if (kind === 'started') await db.query(`UPDATE onboarding_runs SET status = 'validating', updated_at = now() WHERE id = $1`, [id]);
  return dispatch(db, job);
 }
 
@@ -277,9 +278,9 @@ export async function activate(db: Pick<Pool, 'connect'> & Queryable, actorUserI
  const pilot = (await db.query(`SELECT 1 FROM pilot_checks WHERE run_id = $1 AND config_revision = $2 AND passed`, [id, run.config_revision])).rowCount;
  if (!pilot) fail(409, 'PILOT_REQUIRED', 'A pilot must complete the pilot check for this configuration before activation.');
  const binding = (await db.query('SELECT workspace_key FROM instance_bindings WHERE id = $1', [run.binding_id])).rows[0];
- const job = jobConflict(await startJob(db, { appKey: binding.workspace_key, command: 'activate', runId: id, initiatorUserId: actorUserId, requestId: body.requestId, configRevision: run.config_revision,
+ const { kind, job } = jobConflict(await startJob(db, { appKey: binding.workspace_key, command: 'activate', runId: id, initiatorUserId: actorUserId, requestId: body.requestId, configRevision: run.config_revision,
   parameters: { configRevision: run.config_revision!, testedImage: v!.evidence!.testedImage, validationJobId: v!.worker_job_id! } }));
- if (job.stage === 'requested') await db.query(`UPDATE onboarding_runs SET status = 'activating', updated_at = now() WHERE id = $1`, [id]);
+ if (kind === 'started') await db.query(`UPDATE onboarding_runs SET status = 'activating', updated_at = now() WHERE id = $1`, [id]);
  return dispatch(db, job);
 }
 

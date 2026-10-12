@@ -6,8 +6,10 @@ the portal, the application embed, or both.
 
 ## Authoring flow
 
-1. Open Announcements → New banner; choose standard kind/style, write plain text, optionally add a safe
-   link, and preview. All banners remain dismissible; preserve existing Quackback banner behavior.
+1. Open Announcements → New banner; choose the notice type (the fork's `kind`), write plain text, optionally add a
+   safe link, and preview the content. All banners remain dismissible; preserve existing Quackback banner behavior.
+   Owner decision 2026-10-12: Resolve pushes the banner's content only. Presentation belongs to the Quackback fork's
+   banner widgets (its styles per kind, ordering and dismissal); Resolve sends no styling and does not imitate it.
 2. Choose **All registered apps** or **Selected apps**. Search/select by application name/environment,
    show each app's support-instance binding and readiness, and make the current selection count explicit.
 3. Choose portal, embed or both, plus publish now/schedule and optional expiry. Embed delivery requires
@@ -28,6 +30,11 @@ publication cannot proceed there. Operator may repair prerequisites or explicitl
 blocked apps remain recorded as not delivered. Never report success for a skipped target. Do not publish
 to a replacement instance automatically if a binding changes after confirmation; require re-review.
 These edge-case defaults require product acceptance before implementation, not a new definition of “all.”
+
+Owner decisions 2026-10-12 (supersede the proposals above where they differ):
+- “All registered apps” follows the registry until publication, so a scheduled “All apps” broadcast includes apps registered
+  before its publish time. Resolve schedules publication itself, rather than passing a future publish time to each tenant.
+- Partial delivery needs the author's explicit confirmation at review; blocked apps stay recorded as not delivered and can be retried.
 
 ## Delivery contract
 
