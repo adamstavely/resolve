@@ -3,6 +3,7 @@ import { pool } from '../../../lib/db';
 import { requireCapability } from '../../../lib/auth/session';
 import { registry, RegistryUnavailable } from '../../../lib/registry';
 import { grantsFor } from '../../../lib/tenants/grants';
+import { tenantHealth } from '../../../lib/tenants/protocol';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,11 +19,13 @@ export async function GET(request: Request) {
  const grants = await grantsFor(pool(), principal.userId);
  return Response.json({
   registryRevision: reg.revision,
-  apps: reg.apps.map(a => {
+  apps: await Promise.all(reg.apps.map(async a => {
    const g = grants.get(a.appKey);
-   return { appKey: a.appKey, displayName: a.displayName, state: a.state, servable: isServable(a),
+   // Probing would wake a dormant app or contact an unavailable one, so those are reported as not checked.
+   const health = isServable(a) && !a.dormant ? await tenantHealth(a) : { status: 'not_checked' as const, reasons: [], checkedAt: null };
+   return { appKey: a.appKey, displayName: a.displayName, state: a.state, servable: isServable(a), dormant: a.dormant, health,
     connection: { state: g?.state ?? 'not_connected', scopes: g?.scopes ?? [], tenantUserId: g?.tenantUserId ?? null } };
-  }),
+  })),
  }, { headers: { 'Cache-Control': 'no-store' } });
 }
 

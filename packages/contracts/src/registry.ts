@@ -16,6 +16,8 @@ export const registryAppSchema = z.strictObject({
  supportOrigin: z.url({ protocol: /^https?$/ }).refine(u => new URL(u).origin === u, 'An origin without path, query or trailing slash'),
  /** The fleet adapter's routability decision; Resolve never derives it from state alone. */
  routable: z.boolean(),
+ /** Scaled to zero by the fleet. Passive reads must not wake it; only an explicit user request may (plan 01). */
+ dormant: z.boolean(),
  /** Unknown tenant states map to 'unknown' and are treated as unavailable. */
  state: z.string().transform((s): RegistryState => (REGISTRY_STATES as readonly string[]).includes(s) ? s as RegistryState : 'unknown'),
  deploymentVersion: z.string().min(1).max(100),

@@ -10,7 +10,7 @@ const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0
 const hex = (c: string) => c.repeat(64);
 
 describe('registry read (contract 1)', () => {
- const app = { appKey: 'payroll', displayName: 'Payroll', supportOrigin: 'https://payroll.support.corp.internal', routable: true, state: 'active', deploymentVersion: 'qb-0.14.1', protocolVersions: [1], lastActivityAt: null };
+ const app = { appKey: 'payroll', displayName: 'Payroll', supportOrigin: 'https://payroll.support.corp.internal', routable: true, dormant: false, state: 'active', deploymentVersion: 'qb-0.14.1', protocolVersions: [1], lastActivityAt: null };
  test('accepts the projection', () => expect(isServable(registryAppSchema.parse(app))).toBe(true));
  test.each(['dsn', 'secretRef', 'rootKey', 'credentials'])('rejects secret-bearing field %s', field => {
   expect(registryAppSchema.safeParse({ ...app, [field]: 'x' }).success).toBe(false);

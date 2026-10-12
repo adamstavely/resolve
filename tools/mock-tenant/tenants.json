@@ -2,19 +2,130 @@
  "registryPort": 3300,
  "tenants": [
   {
-   "appKey": "payroll", "displayName": "Payroll", "port": 3301, "state": "active", "routable": true,
-   "idpClient": { "id": "qb-payroll", "secret": "dev-only-payroll-idp-client" },
-   "resolveClient": { "id": "resolve", "secret": "dev-only-payroll-resolve-client" }
+   "appKey": "payroll",
+   "displayName": "Payroll",
+   "port": 3301,
+   "state": "active",
+   "routable": true,
+   "idpClient": {
+    "id": "qb-payroll",
+    "secret": "dev-only-payroll-idp-client"
+   },
+   "resolveClient": {
+    "id": "resolve",
+    "secret": "dev-only-payroll-resolve-client"
+   },
+   "dormant": false,
+   "seed": 11,
+   "tickets": 130,
+   "conversations": 48,
+   "analyticsRoles": [
+    "admin",
+    "agent",
+    "observer"
+   ]
   },
   {
-   "appKey": "hr", "displayName": "HR Platform", "port": 3302, "state": "active", "routable": true,
-   "idpClient": { "id": "qb-hr", "secret": "dev-only-hr-idp-client-secret" },
-   "resolveClient": { "id": "resolve", "secret": "dev-only-hr-resolve-client-xx" }
+   "appKey": "hr",
+   "displayName": "HR Platform",
+   "port": 3302,
+   "state": "active",
+   "routable": true,
+   "idpClient": {
+    "id": "qb-hr",
+    "secret": "dev-only-hr-idp-client-secret"
+   },
+   "resolveClient": {
+    "id": "resolve",
+    "secret": "dev-only-hr-resolve-client-xx"
+   },
+   "dormant": false,
+   "seed": 23,
+   "tickets": 42,
+   "conversations": 30,
+   "analyticsRoles": [
+    "admin",
+    "agent"
+   ]
   },
   {
-   "appKey": "facilities", "displayName": "Facilities", "port": 3303, "state": "suspended", "routable": false,
-   "idpClient": { "id": "qb-facilities", "secret": "dev-only-facilities-idp-client" },
-   "resolveClient": { "id": "resolve", "secret": "dev-only-facilities-resolve-cl" }
+   "appKey": "facilities",
+   "displayName": "Facilities",
+   "port": 3303,
+   "state": "suspended",
+   "routable": false,
+   "idpClient": {
+    "id": "qb-facilities",
+    "secret": "dev-only-facilities-idp-client"
+   },
+   "resolveClient": {
+    "id": "resolve",
+    "secret": "dev-only-facilities-resolve-cl"
+   },
+   "dormant": false,
+   "seed": 31,
+   "tickets": 10,
+   "conversations": 5,
+   "analyticsRoles": [
+    "admin",
+    "agent",
+    "observer"
+   ]
+  },
+  {
+   "appKey": "legal",
+   "displayName": "Legal Ops",
+   "port": 3304,
+   "state": "active",
+   "routable": true,
+   "dormant": true,
+   "seed": 47,
+   "tickets": 18,
+   "conversations": 9,
+   "analyticsRoles": [
+    "admin",
+    "agent",
+    "observer"
+   ],
+   "idpClient": {
+    "id": "qb-legal",
+    "secret": "dev-only-legal-idp-client-secret"
+   },
+   "resolveClient": {
+    "id": "resolve",
+    "secret": "dev-only-legal-resolve-client-xx"
+   }
   }
- ]
+ ],
+ "people": {
+  "mock|ada": {
+   "role": "admin",
+   "teams": []
+  },
+  "mock|sam": {
+   "role": "agent",
+   "teams": [
+    "support"
+   ]
+  },
+  "mock|olive": {
+   "role": "observer",
+   "teams": [
+    "support"
+   ]
+  },
+  "mock|bo": {
+   "role": "agent",
+   "teams": [
+    "billing"
+   ]
+  },
+  "mock|sam-imposter": {
+   "role": "agent",
+   "teams": [
+    "billing"
+   ]
+  }
+ },
+ "_comment": "Development fixture. people: tenant role and teams per IdP subject (anyone else is a portal user with no team access)."
 }

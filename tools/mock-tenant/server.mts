@@ -14,14 +14,16 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createLocalJWKSet, createRemoteJWKSet, exportJWK, generateKeyPair, jwtVerify, SignJWT, type JWK } from 'jose';
+import { buildTenant, callTool, ToolError, type Viewer } from './fixtures.mjs';
 
 if (process.env.NODE_ENV === 'production') throw new Error('The mock tenants must never run in production');
 
 interface TenantConfig {
- appKey: string; displayName: string; port: number; state: string; routable: boolean;
+ appKey: string; displayName: string; port: number; state: string; routable: boolean; dormant: boolean;
+ seed: number; tickets: number; conversations: number; analyticsRoles: string[];
  idpClient: { id: string; secret: string }; resolveClient: { id: string; secret: string };
 }
-const fleet: { registryPort: number; tenants: TenantConfig[] } = JSON.parse(readFileSync(new URL('./tenants.json', import.meta.url), 'utf8'));
+const fleet: { registryPort: number; tenants: TenantConfig[]; people: Record<string, { role: Viewer['role']; teams: string[] }> } = JSON.parse(readFileSync(new URL('./tenants.json', import.meta.url), 'utf8'));
 const idp = new URL(required('OIDC_ISSUER')).origin;
 const resolveRedirect = `${new URL(required('RESOLVE_ORIGIN')).origin}/api/connect/callback`;
 const registryToken = required('REGISTRY_TOKEN');
@@ -73,6 +75,43 @@ async function startTenant(t: TenantConfig) {
   const h = sha(`${t.appKey}|${idpIss}|${idpSub}`).slice(0, 20);
   return { id: `user_${h}`, principalId: `principal_${h}`, idpIss, idpSub, name };
  };
+
+ // Support data. Staff are the configured people (by their tenant principal) plus two fictional agents.
+ const people = Object.entries(fleet.people).map(([sub, p]) => ({ ...p, user: userFor(idp, sub, sub) }));
+ const names: Record<string, string> = { 'mock|ada': 'Ada Admin', 'mock|sam': 'Sam Agent', 'mock|olive': 'Olive Observer', 'mock|bo': 'Bo Blockable', 'mock|sam-imposter': 'Sam Duplicate' };
+ const staff = [...people.filter(p => p.role === 'agent').map(p => ({ principalId: p.user.principalId, name: names[p.user.idpSub] ?? p.user.idpSub })),
+  { principalId: 'principal_priya', name: 'Priya Shah' }, { principalId: 'principal_tom', name: 'Tom Okafor' }];
+ const data = buildTenant(t.appKey, t.seed, { tickets: t.tickets, conversations: t.conversations }, staff);
+ const viewerFor = (tenantUserId: string): Viewer => {
+  const p = people.find(x => x.user.id === tenantUserId);
+  if (!p) return { principalId: 'principal_' + tenantUserId.slice(5), role: 'portal', teams: [], analytics: false };
+  return { principalId: p.user.principalId, role: p.role, teams: p.teams, analytics: t.analyticsRoles.includes(p.role) };
+ };
+ const stats = { toolCalls: 0, protocolCalls: 0 };
+
+ /** Minimal MCP JSON-RPC endpoint: tools/call for the gap-fixed read tools, results as JSON text content (as Quackback does). */
+ async function mcp(req: IncomingMessage, res: ServerResponse) {
+  const bearer = req.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
+  let payload;
+  try { ({ payload } = await jwtVerify(bearer ?? '', ownKeys, { issuer, audience: `${origin}/api/mcp` })); }
+  catch { res.writeHead(401, { 'WWW-Authenticate': 'Bearer error="invalid_token"', 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ error: 'invalid_token' })); }
+  const rpc = JSON.parse(await body(req));
+  stats.toolCalls++;
+  const reply = (result: unknown) => send(res, 200, { jsonrpc: '2.0', id: rpc.id ?? null, result });
+  if (rpc.method !== 'tools/call') return send(res, 200, { jsonrpc: '2.0', id: rpc.id ?? null, error: { code: -32601, message: 'Method not found' } });
+  if (!String(payload.scope).split(' ').includes('read:chat')) {
+   res.writeHead(403, { 'WWW-Authenticate': 'Bearer error="insufficient_scope", scope="read:chat"', 'Content-Type': 'application/json' });
+   return res.end(JSON.stringify({ error: 'insufficient_scope' }));
+  }
+  const viewer = viewerFor(String(payload.sub));
+  if (viewer.role === 'portal') return reply({ isError: true, content: [{ type: 'text', text: 'Error: This operation requires a team member (admin or member) role.' }] });
+  try {
+   reply({ content: [{ type: 'text', text: JSON.stringify(callTool(data, viewer, String(rpc.params?.name), rpc.params?.arguments ?? {})) }] });
+  } catch (e) {
+   if (e instanceof ToolError) return reply({ isError: true, content: [{ type: 'text', text: `Error: ${e.code}: ${e.message}` }] });
+   throw e;
+  }
+ }
 
  async function issueTokens(res: ServerResponse, user: TenantUser, scope: string, nonce: string | null, family = b64url(randomBytes(16))) {
   const now = Math.floor(Date.now() / 1000);
@@ -175,6 +214,13 @@ async function startTenant(t: TenantConfig) {
    if (req.method === 'GET' && url.pathname === '/api/auth/idp/callback') return await idpCallback(res, url.searchParams);
    if (req.method === 'POST' && url.pathname === '/api/auth/oauth2/token') return await token(req, res);
    if (req.method === 'GET' && url.pathname === '/api/mcp/whoami') return await whoami(req, res);
+   if (req.method === 'POST' && url.pathname === '/api/mcp') return await mcp(req, res);
+   if (req.method === 'GET' && url.pathname === '/api/resolve/protocol') {
+    stats.protocolCalls++;
+    return send(res, 200, { protocolVersions: [1], tools: { list_tickets: 2, get_ticket: 1, list_conversations: 1, get_conversation: 2, get_support_dashboard: 1, list_support_activity: 1 } });
+   }
+   if (req.method === 'GET' && url.pathname === '/dev/stats') return send(res, 200, stats);
+   if (req.method === 'POST' && url.pathname === '/dev/reset-stats') { stats.toolCalls = 0; stats.protocolCalls = 0; return send(res, 200, stats); }
    // Development controls for tests.
    if (req.method === 'POST' && url.pathname === '/dev/drop-next-token-response') { dropNextTokenResponse = true; return send(res, 200, { ok: true }); }
    send(res, 404, { error: 'not_found' });
@@ -191,7 +237,7 @@ createServer((req, res) => {
  if (req.method !== 'GET' || new URL(req.url ?? '/', 'http://x').pathname !== '/registry') return send(res, 404, { error: 'not_found' });
  if (!safeEqual(req.headers.authorization ?? '', `Bearer ${registryToken}`)) return send(res, 401, { error: 'unauthorized' });
  const apps = fleet.tenants.map(t => ({
-  appKey: t.appKey, displayName: t.displayName, supportOrigin: `http://127.0.0.1:${t.port}`, routable: t.routable, state: t.state,
+  appKey: t.appKey, displayName: t.displayName, supportOrigin: `http://127.0.0.1:${t.port}`, routable: t.routable, dormant: t.dormant, state: t.state,
   deploymentVersion: 'quackback-0.14.1-mock', protocolVersions: [1], lastActivityAt: null,
  }));
  send(res, 200, { schemaVersion: 1, revision: sha(JSON.stringify(apps)).slice(0, 12), apps });

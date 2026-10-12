@@ -26,6 +26,9 @@ export const appsResponseSchema = z.strictObject({
   displayName: z.string(),
   state: z.string(),
   servable: z.boolean(),
+  dormant: z.boolean(),
+  /** Tenant protocol/tool compatibility (contract 6). Dormant and unavailable apps are not probed. */
+  health: z.strictObject({ status: z.enum(['ok', 'incompatible', 'unreachable', 'not_checked']), reasons: z.array(z.string()), checkedAt: z.string().nullable() }),
   connection: z.strictObject({
    state: z.enum(['not_connected', 'connecting', 'connected', 'reconnect_required', 'revoked', 'denied']),
    scopes: z.array(z.string()),
