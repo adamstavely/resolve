@@ -67,6 +67,7 @@ Evidence: [component gate](docs/evidence/phase-0-component-gate.md),
 - [11 — Dashboard KPI definitions and API verification](plans/11-dashboard-kpi-contract.md)
 - [12 — Elastic Observability integration: first release](plans/12-elastic-observability-integration.md)
 - [13 — ServiceNow incident integration: after first release](plans/13-servicenow-integration.md)
+- [14 — Elastic integration: implementation plan](plans/14-elastic-implementation.md)
 
 Resolve's repository: https://github.com/adamstavely/resolve
 Quackback fork: https://github.com/adamstavely/quackback

@@ -128,4 +128,10 @@ Use feature flags per connection and app. Canary one nonproduction app then one 
 6. Is an Elastic Case a maintained engineering record, or should issue linkage prefer ServiceNow incidents when both exist?
 7. Are the proposed 30-second health refresh and 60-second subject refresh adequate, and at what app/operator volume?
 
+Resolved by owner, 2026-10-12 (implementation in [plan 14](14-elastic-implementation.md)):
+- Deployment: Elastic Cloud Hosted 9.x over a private link; build against a mock and pin the exact build in E0.
+- Subject mapping: the fork's verified `external_id` (signed-token identify `sub`), exposed via a new tenant tool gap (QB-OBS-1); no verified id means service-level context only.
+- Evidence: an immutable Resolve snapshot tied to the Quackback ticket/conversation, with an internal note linking it; Elastic Cases are read-only (answers decision 6 for the first release).
+- Access: capabilities instead of prototype tiers — health for agents and observers, subject context for agents, redacted traces/logs and export for a new investigator bundle (answers decision 3's first half; retention remains open).
+
 No answer is assumed merely because it appears in the prototype. Independent E0/E1 specification work can proceed while execution-related choices remain open.
