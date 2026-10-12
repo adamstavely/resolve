@@ -1,14 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { signInAs } from './helpers';
 
 /* Requires the mock IdP, API, console and a migrated database (npm run dev). */
 
-async function signInAs(page: Page, name: string, start = '/api/auth/login?returnTo=/') {
- await page.goto(start);
- await expect(page).toHaveTitle(/Mock identity provider/);
- await page.getByLabel(name).check();
- await page.getByRole('button', { name: 'Continue' }).click();
-}
 const session = async (page: Page) => (await page.request.get('/api/session')).json();
 
 test('agent signs in through the IdP and gets agent capabilities only', async ({ page }) => {

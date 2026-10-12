@@ -67,7 +67,7 @@ export async function createSession(db: Queryable, s: { idHash: string; userId: 
   [s.idHash, s.userId, s.identityId, s.absoluteMinutes]);
 }
 
-export interface SessionUser { userId: string; displayName: string; email: string | null; bundles: string[] }
+export interface SessionUser { userId: string; displayName: string; email: string | null; bundles: string[]; identity: { id: string; issuer: string; subject: string } }
 
 /**
  * The signed-in user for a session, or undefined when the session is unknown, revoked, past its absolute
@@ -76,14 +76,15 @@ export interface SessionUser { userId: string; displayName: string; email: strin
 export async function findSession(db: Queryable, idHash: string, idleMinutes: number): Promise<SessionUser | undefined> {
  const r = await db.query(
   `UPDATE sessions s SET last_seen_at = now()
-   FROM users u
-   WHERE s.id_hash = $1 AND u.id = s.user_id AND u.enabled AND s.revoked_at IS NULL
+   FROM users u, identities i
+   WHERE s.id_hash = $1 AND u.id = s.user_id AND i.id = s.identity_id AND u.enabled AND s.revoked_at IS NULL
      AND s.expires_at > now() AND s.last_seen_at > now() - make_interval(mins => $2)
-   RETURNING u.id, u.display_name, u.email,
+   RETURNING u.id, u.display_name, u.email, i.id AS identity_id, i.issuer, i.subject,
      ARRAY(SELECT DISTINCT bundle FROM role_members m WHERE m.user_id = u.id ORDER BY bundle) AS bundles`,
   [idHash, idleMinutes]);
  const row = r.rows[0];
- return row && { userId: row.id, displayName: row.display_name, email: row.email, bundles: row.bundles };
+ return row && { userId: row.id, displayName: row.display_name, email: row.email, bundles: row.bundles,
+  identity: { id: row.identity_id, issuer: row.issuer, subject: row.subject } };
 }
 
 export async function revokeSession(db: Queryable, idHash: string): Promise<string | undefined> {
@@ -91,11 +92,18 @@ export async function revokeSession(db: Queryable, idHash: string): Promise<stri
  return r.rows[0]?.user_id;
 }
 
-/** Disabling a user denies existing sessions immediately (findSession checks enabled) and revokes them. */
+/**
+ * Manual (emergency) denial, independent of the directory: denies existing sessions immediately (findSession
+ * checks enabled), revokes them and discards per-app tokens. Only a manual enable lifts it.
+ */
 export async function setUserEnabled(db: Pick<Pool, 'connect'>, userId: string, enabled: boolean) {
  await transaction(db, async tx => {
-  await tx.query('UPDATE users SET enabled = $2, updated_at = now() WHERE id = $1', [userId, enabled]);
-  if (!enabled) await tx.query('UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [userId]);
+  await tx.query(`UPDATE users SET enabled = $2, disabled_reason = CASE WHEN $2 THEN NULL ELSE 'manual' END, updated_at = now() WHERE id = $1`, [userId, enabled]);
+  if (!enabled) {
+   await tx.query('UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [userId]);
+   await tx.query(`UPDATE user_tenant_grants SET state = 'revoked', scopes = '{}', access_token_enc = NULL, refresh_token_enc = NULL,
+    access_expires_at = NULL, last_error = 'manually_disabled', updated_at = now() WHERE user_id = $1 AND state <> 'revoked'`, [userId]);
+  }
  });
 }
 

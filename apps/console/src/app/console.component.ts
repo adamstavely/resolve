@@ -1,8 +1,25 @@
 import { Component, CUSTOM_ELEMENTS_SCHEMA, computed, signal } from '@angular/core';
-import { BUNDLE_LABELS, CAPABILITIES, healthSchema, sessionResponseSchema, type SessionResponse } from '../../../../packages/contracts/src/index';
+import { appsResponseSchema, BUNDLE_LABELS, CAPABILITIES, healthSchema, sessionResponseSchema, whoamiResponseSchema, type AppsResponse, type SessionResponse } from '../../../../packages/contracts/src/index';
 import { RESOLVE_ELEMENTS } from './elements';
 
 type Density = 'compact' | 'balanced' | 'spacious';
+
+const CONNECTION_LABELS: Record<string, string> = {
+ not_connected: 'Not connected', connecting: 'Connecting', connected: 'Connected', reconnect_required: 'Reconnect required',
+ revoked: 'Access revoked', denied: 'Denied',
+};
+
+function connectMessage(result: string | null, appName = 'the application'): { text: string; alert: boolean } | undefined {
+ const app = appName;
+ switch (result) {
+  case 'connected': return { text: `Connected to ${app}.`, alert: false };
+  case 'disconnected': return { text: `Disconnected from ${app}.`, alert: false };
+  case 'unavailable': return { text: `${app} is not available right now. Try again later.`, alert: true };
+  case 'mismatch': return { text: `The account used at ${app} does not belong to you in Resolve. Sign out of other accounts and try again, or contact support.`, alert: true };
+  case 'failed': return { text: `Connecting to ${app} did not complete. Try again.`, alert: true };
+  default: return undefined;
+ }
+}
 
 const SIGNIN_MESSAGES: Record<string, { text: string; alert: boolean }> = {
  failed: { text: 'Sign-in did not complete. Try again; if it keeps failing, contact support.', alert: true },
@@ -39,9 +56,9 @@ const SIGNIN_MESSAGES: Record<string, { text: string; alert: boolean }> = {
  <main id="main" tabindex="-1">
   @if (signinMessage(); as m) { <p class="notice" [attr.role]="m.alert ? 'alert' : 'status'">{{ m.text }}</p> }
   <section class="hero">
-   <p class="badge">Phase 1 · Sign-in</p>
+   <p class="badge">Phase 1 · Identity and connections</p>
    <h1>One place to support<br>every application.</h1>
-   <p class="muted">Development workspace for validating Resolve's component and service boundaries. Nothing here connects to an application.</p>
+   <p class="muted">Development workspace. Sign-in and application connections run against local mock services, not real applications.</p>
   </section>
 
   <section class="panel" aria-labelledby="service-title">
@@ -63,6 +80,37 @@ const SIGNIN_MESSAGES: Record<string, { text: string; alert: boolean }> = {
     }
    } @else { <p>Checking sign-in…</p> }
   </section>
+
+  @if (apps(); as list) {
+   <section class="panel" aria-labelledby="apps-title">
+    <h2 id="apps-title">Applications</h2>
+    <p class="muted">Connect to each application once. Resolve then acts as you there, with only the access your role needs.</p>
+    <div class="table-wrap"><table>
+     <caption class="sr-only">Registered applications and your connection to each</caption>
+     <thead><tr><th scope="col">Application</th><th scope="col">Status</th><th scope="col">Your connection</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+     <tbody>
+      @for (a of list.apps; track a.appKey) {
+       <tr>
+        <th scope="row">{{ a.displayName }}</th>
+        <td>{{ a.servable ? 'Available' : 'Unavailable (' + a.state + ')' }}</td>
+        <td>{{ connectionLabel(a.connection.state) }}@if (a.connection.state === 'connected') { <span class="muted"> · {{ a.connection.scopes.filter(isToolScope).join(', ') || 'sign-in only' }}</span> }</td>
+        <td class="actions">
+         @if (a.servable && canConnect()) {
+          @if (a.connection.state === 'connected') {
+           <button class="btn" type="button" (click)="checkConnection(a.appKey, a.displayName)">Check connection<span class="sr-only"> to {{ a.displayName }}</span></button>
+           <form method="post" [action]="'/api/connect/' + a.appKey + '/disconnect'"><button class="btn" type="submit">Disconnect<span class="sr-only"> from {{ a.displayName }}</span></button></form>
+          } @else {
+           <a class="btn btn-primary" [href]="'/api/connect/' + a.appKey + '/start'">{{ a.connection.state === 'not_connected' ? 'Connect' : 'Reconnect' }}<span class="sr-only"> to {{ a.displayName }}</span></a>
+          }
+         }
+        </td>
+       </tr>
+      }
+     </tbody>
+    </table></div>
+    <p role="status">{{ connectionCheck() }}</p>
+   </section>
+  }
 
   <section class="panel" aria-labelledby="check-title">
    <h2 id="check-title">Component check</h2>
@@ -95,7 +143,14 @@ export class ConsoleComponent {
  readonly health = signal('Checking backend…');
  readonly session = signal<SessionResponse | undefined>(undefined);
  readonly roleLabels = computed(() => { const s = this.session(); return s?.authenticated ? s.bundles.map(b => BUNDLE_LABELS[b]).join(', ') : ''; });
- readonly signinMessage = signal<{ text: string; alert: boolean } | undefined>(SIGNIN_MESSAGES[new URLSearchParams(location.search).get('signin') ?? '']);
+ readonly apps = signal<AppsResponse | undefined>(undefined);
+ readonly connectionCheck = signal('');
+ readonly canConnect = computed(() => { const s = this.session(); return !!s?.authenticated && s.capabilities.includes('connection.manage'); });
+ private readonly query = new URLSearchParams(location.search);
+ readonly signinMessage = computed(() => {
+  const name = this.apps()?.apps.find(a => a.appKey === this.query.get('app'))?.displayName ?? this.query.get('app') ?? undefined;
+  return SIGNIN_MESSAGES[this.query.get('signin') ?? ''] ?? connectMessage(this.query.get('connect'), name);
+ });
  readonly appName = signal('');
  readonly contact = signal('');
  readonly team = signal('');
@@ -112,10 +167,33 @@ export class ConsoleComponent {
    .then(async r => { if (!r.ok) throw Error(); healthSchema.parse(await r.json()); this.health.set('Resolve API is reachable · contract v1'); })
    .catch(() => this.health.set('Backend unavailable. Start the API service and reload.'));
   fetch('/api/session', { credentials: 'same-origin' })
-   .then(async r => this.session.set(sessionResponseSchema.parse(await r.json())))
+   .then(async r => {
+    const s = sessionResponseSchema.parse(await r.json());
+    this.session.set(s);
+    if (s.authenticated && s.capabilities.includes('fleet.view')) this.loadApps();
+   })
    .catch(() => this.session.set({ authenticated: false }));
   // Drop the one-time sign-in result from the address bar so a reload does not repeat it.
   if (this.signinMessage()) history.replaceState(null, '', location.pathname);
+ }
+
+ loadApps() {
+  fetch('/api/apps', { credentials: 'same-origin' })
+   .then(async r => { if (!r.ok) throw Error(); this.apps.set(appsResponseSchema.parse(await r.json())); })
+   .catch(() => this.connectionCheck.set('Applications could not be loaded. Try again shortly.'));
+ }
+
+ connectionLabel(state: string) { return CONNECTION_LABELS[state] ?? state; }
+ isToolScope(scope: string) { return scope !== 'openid' && scope !== 'offline_access'; }
+
+ checkConnection(appKey: string, name: string) {
+  this.connectionCheck.set(`Checking ${name}…`);
+  fetch(`/api/apps/${encodeURIComponent(appKey)}/whoami`, { credentials: 'same-origin' }).then(async r => {
+   const body = await r.json();
+   if (!r.ok) { this.connectionCheck.set(`${name}: ${body.error?.message ?? 'check failed.'}`); if (body.error?.code === 'RECONNECT_REQUIRED') this.loadApps(); return; }
+   const who = whoamiResponseSchema.parse(body);
+   this.connectionCheck.set(`${name} recognises you as ${who.tenantUserId} with ${who.scopes.filter(s => this.isToolScope(s)).join(', ') || 'sign-in only'}.`);
+  }).catch(() => this.connectionCheck.set(`${name}: check failed.`));
  }
 
  capabilitySummary(id: keyof typeof CAPABILITIES) { return CAPABILITIES[id].summary; }

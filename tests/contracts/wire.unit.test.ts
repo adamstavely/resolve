@@ -10,7 +10,7 @@ const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0
 const hex = (c: string) => c.repeat(64);
 
 describe('registry read (contract 1)', () => {
- const app = { appKey: 'payroll', displayName: 'Payroll', primaryHostname: 'payroll.support.corp.internal', routable: true, state: 'active', deploymentVersion: 'qb-0.14.1', protocolVersions: [1], lastActivityAt: null };
+ const app = { appKey: 'payroll', displayName: 'Payroll', supportOrigin: 'https://payroll.support.corp.internal', routable: true, state: 'active', deploymentVersion: 'qb-0.14.1', protocolVersions: [1], lastActivityAt: null };
  test('accepts the projection', () => expect(isServable(registryAppSchema.parse(app))).toBe(true));
  test.each(['dsn', 'secretRef', 'rootKey', 'credentials'])('rejects secret-bearing field %s', field => {
   expect(registryAppSchema.safeParse({ ...app, [field]: 'x' }).success).toBe(false);
@@ -19,6 +19,9 @@ describe('registry read (contract 1)', () => {
   const parsed = registryAppSchema.parse({ ...app, state: 'warming' });
   expect(parsed.state).toBe('unknown');
   expect(isServable(parsed)).toBe(false);
+ });
+ test.each(['https://payroll.support.corp.internal/', 'https://payroll.support.corp.internal/admin', 'ftp://payroll.corp.internal'])('rejects non-origin %s', o => {
+  expect(registryAppSchema.safeParse({ ...app, supportOrigin: o }).success).toBe(false);
  });
  test('routable flag is required for service, independent of state', () => expect(isServable(registryAppSchema.parse({ ...app, routable: false }))).toBe(false));
 });

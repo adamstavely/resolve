@@ -49,8 +49,8 @@ describe('capability catalogue', () => {
  test('every gap referenced by a tool is documented, and every documented gap is referenced', () => {
   const used = new Set(Object.values(TENANT_TOOLS).flatMap(t => t.gaps));
   for (const g of used) expect(GAPS).toHaveProperty(g);
-  // QB-REG-1 and QB-PROTO-1 block contracts 1 and 6, not a single tool.
-  expect(Object.keys(GAPS).filter(g => !used.has(g as never)).sort()).toEqual(['QB-PROTO-1', 'QB-REG-1']);
+  // QB-ID-1, QB-REG-1 and QB-PROTO-1 block contracts 2, 1 and 6, not a single tool.
+  expect(Object.keys(GAPS).filter(g => !used.has(g as never)).sort()).toEqual(['QB-ID-1', 'QB-PROTO-1', 'QB-REG-1']);
  });
 
  test('available tools have wire schemas; mutations declare idempotency', () => {

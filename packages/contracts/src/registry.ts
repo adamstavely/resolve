@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { appKeySchema, hostnameSchema, isoDateTimeSchema } from './common';
+import { appKeySchema, isoDateTimeSchema } from './common';
 
 /*
  * Contract 1 (plan 01): registry read. A versioned, column-limited projection supplied by the
@@ -12,7 +12,8 @@ export type RegistryState = (typeof REGISTRY_STATES)[number] | 'unknown';
 export const registryAppSchema = z.strictObject({
  appKey: appKeySchema,
  displayName: z.string().min(1).max(120),
- primaryHostname: hostnameSchema,
+ /** Canonical support origin (scheme, host, optional port; no path). The tenant OAuth issuer is `${origin}/api/auth`. */
+ supportOrigin: z.url({ protocol: /^https?$/ }).refine(u => new URL(u).origin === u, 'An origin without path, query or trailing slash'),
  /** The fleet adapter's routability decision; Resolve never derives it from state alone. */
  routable: z.boolean(),
  /** Unknown tenant states map to 'unknown' and are treated as unavailable. */

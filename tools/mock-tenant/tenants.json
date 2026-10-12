@@ -1,0 +1,20 @@
+{
+ "registryPort": 3300,
+ "tenants": [
+  {
+   "appKey": "payroll", "displayName": "Payroll", "port": 3301, "state": "active", "routable": true,
+   "idpClient": { "id": "qb-payroll", "secret": "dev-only-payroll-idp-client" },
+   "resolveClient": { "id": "resolve", "secret": "dev-only-payroll-resolve-client" }
+  },
+  {
+   "appKey": "hr", "displayName": "HR Platform", "port": 3302, "state": "active", "routable": true,
+   "idpClient": { "id": "qb-hr", "secret": "dev-only-hr-idp-client-secret" },
+   "resolveClient": { "id": "resolve", "secret": "dev-only-hr-resolve-client-xx" }
+  },
+  {
+   "appKey": "facilities", "displayName": "Facilities", "port": 3303, "state": "suspended", "routable": false,
+   "idpClient": { "id": "qb-facilities", "secret": "dev-only-facilities-idp-client" },
+   "resolveClient": { "id": "resolve", "secret": "dev-only-facilities-resolve-cl" }
+  }
+ ]
+}

@@ -45,6 +45,7 @@ export const GAPS = {
  'QB-DASH-2': 'No authorized activity list (list_support_activity)',
  'QB-ANN-1': 'Announcement service exists, but no MCP tools or OAuth scope expose it',
  'QB-ANN-2': 'Announcement writes have no broadcast ID / idempotency key / payload-hash replay check',
+ 'QB-ID-1': 'Tenant OAuth tokens must assert the federated IdP issuer/subject (idp_iss, idp_sub) and principal_id so Resolve can prove account ownership',
  'QB-REG-1': 'No Resolve-facing, column-limited registry projection (registry is internal to the fleet)',
  'QB-PROTO-1': 'Tenants do not advertise supported protocol/tool versions',
  'QB-FILE-1': 'No authorized attachment download contract for Resolve',
