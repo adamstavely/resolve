@@ -28,56 +28,54 @@ const requesterName = (d: Detail) => d.messages.find(m => m.senderType === 'visi
 <div class="page">
  <a class="back" routerLink="/tickets"><rs-icon name="arrowL" [size]="15" />All tickets</a>
  @if (detail(); as d) {
-  <header class="page-head">
-   <p class="eyebrow mono">{{ state.appName(app()) }} · {{ d.ticket.reference }}</p>
-   <h1 class="page-title" tabindex="-1">{{ d.ticket.title }}</h1>
+  <header class="ticket-head">
+   <div class="ticket-head-main">
+    <p class="eyebrow mono">{{ state.appName(app()) }} · {{ d.ticket.reference }}</p>
+    <h1 class="page-title" tabindex="-1">{{ d.ticket.title }}</h1>
+    <p class="ticket-sub small muted">{{ customerName(d) ?? 'Unknown requester' }} · opened <time [attr.datetime]="d.ticket.createdAt" [attr.title]="fullTime(d.ticket.createdAt)">{{ relativeTime(d.ticket.createdAt) }}</time> · updated <time [attr.datetime]="d.ticket.updatedAt" [attr.title]="fullTime(d.ticket.updatedAt)">{{ relativeTime(d.ticket.updatedAt) }}</time></p>
+   </div>
+   @if (state.can('ticket.assign') || state.can('ticket.status')) {
+    <div class="ticket-actions">
+     @if (state.can('ticket.assign')) {
+      @if (d.ticket.assigneeName === state.user()?.displayName) { <button class="btn btn-sm" type="button" (click)="assign('unassigned')" [disabled]="busy()">Unassign</button> }
+      @else { <button class="btn btn-sm" type="button" (click)="assign('me')" [disabled]="busy()">Assign to me</button> }
+     }
+     @if (state.can('ticket.status')) {
+      <label for="ticket-status">Change status
+       <select id="ticket-status" [value]="d.ticket.status.category" (change)="requestStatus($any($event.target))">
+        <option value="open">Open</option><option value="pending">Waiting on customer</option><option value="closed">Resolved</option>
+       </select>
+      </label>
+     }
+    </div>
+   }
   </header>
-  <div class="detail-cols">
-   <section class="card" aria-labelledby="thread-title">
-    <div class="card-head"><h2 class="card-title" id="thread-title">Thread</h2></div>
-    <div class="pad"><rs-thread [messages]="d.messages" [attachmentBase]="base() + '/attachments/'" /></div>
-    @if (state.can('ticket.reply') || state.can('ticket.note')) {
-     <div class="pad composer-wrap">
-      <rs-composer fieldId="ticket-composer" [canReply]="state.can('ticket.reply')" [canNote]="state.can('ticket.note')" [pending]="sender.pending()"
-       [uploadPath]="'/api/apps/' + encode(app()) + '/uploads'" [target]="{ type: 'ticket', id: id() }"
-       (send)="sender.send($event)" (retry)="sender.retry($event)" (check)="sender.check($event)" (discard)="sender.discard($event)" />
-      @if (sender.lastSent(); as l) { <p class="small"><a [routerLink]="['/receipts', l.operationId]">View the receipt for your {{ l.kind }}</a></p> }
-     </div>
-    }
-   </section>
-   <aside class="card" aria-labelledby="facts-title">
-    <div class="card-head"><h2 class="card-title" id="facts-title">Details</h2></div>
-    <dl class="facts pad">
-     <div><dt>Status</dt><dd><span class="tag" [attr.data-tone]="d.ticket.status.category === 'open' ? 'sensitive' : d.ticket.status.category === 'closed' ? 'safe' : 'neutral'">{{ d.ticket.status.name }}</span></dd></div>
-     <div><dt>Priority</dt><dd>{{ d.ticket.priority === 'none' ? '—' : d.ticket.priority }}</dd></div>
-     <div><dt>Owner</dt><dd>{{ d.ticket.assigneeName ?? 'Unassigned' }}</dd></div>
-     <div><dt>Team</dt><dd>{{ d.ticket.teamName ?? '—' }}</dd></div>
-     <div><dt>SLA</dt><dd>
-      @if (d.ticket.slaBreachedAt) { <span class="tag" data-tone="destructive">Breached {{ relativeTime(d.ticket.slaBreachedAt) }}</span> }
-      @else if (d.ticket.slaDueAt) { <time [attr.datetime]="d.ticket.slaDueAt" [attr.title]="fullTime(d.ticket.slaDueAt)">Due {{ relativeTime(d.ticket.slaDueAt) }}</time> }
-      @else { — }
-     </dd></div>
-     <div><dt>Created</dt><dd><time [attr.datetime]="d.ticket.createdAt">{{ fullTime(d.ticket.createdAt) }}</time></dd></div>
-     <div><dt>Updated</dt><dd><time [attr.datetime]="d.ticket.updatedAt">{{ fullTime(d.ticket.updatedAt) }}</time></dd></div>
-    </dl>
-    @if (state.can('ticket.assign') || state.can('ticket.status')) {
-     <div class="pad ticket-actions">
-      @if (state.can('ticket.assign')) {
-       @if (d.ticket.assigneeName === state.user()?.displayName) { <button class="btn btn-sm" type="button" (click)="assign('unassigned')" [disabled]="busy()">Unassign</button> }
-       @else { <button class="btn btn-sm" type="button" (click)="assign('me')" [disabled]="busy()">Assign to me</button> }
-      }
-      @if (state.can('ticket.status')) {
-       <label for="ticket-status">Change status
-        <select id="ticket-status" [value]="d.ticket.status.category" (change)="requestStatus($any($event.target))">
-         <option value="open">Open</option><option value="pending">Waiting on customer</option><option value="closed">Resolved</option>
-        </select>
-       </label>
-      }
-      @if (actionMessage()) { <p class="small" [attr.role]="actionError() ? 'alert' : 'status'">{{ actionMessage() }}@if (lastOperation(); as op) {&nbsp;<a [routerLink]="['/receipts', op]">View receipt</a> }</p> }
-     </div>
-    }
-   </aside>
-  </div>
+  @if (actionMessage()) { <p class="small" [attr.role]="actionError() ? 'alert' : 'status'">{{ actionMessage() }}@if (lastOperation(); as op) {&nbsp;<a [routerLink]="['/receipts', op]">View receipt</a> }</p> }
+  <section class="ticket-facts" aria-label="Details">
+   <dl>
+    <div><dt>Status</dt><dd><span class="tag" [attr.data-tone]="d.ticket.status.category === 'open' ? 'sensitive' : d.ticket.status.category === 'closed' ? 'safe' : 'neutral'">{{ d.ticket.status.name }}</span></dd></div>
+    <div><dt>Priority</dt><dd>{{ d.ticket.priority === 'none' ? '—' : d.ticket.priority }}</dd></div>
+    <div><dt>Owner</dt><dd>{{ d.ticket.assigneeName ?? 'Unassigned' }}</dd></div>
+    <div><dt>Team</dt><dd>{{ d.ticket.teamName ?? '—' }}</dd></div>
+    <div><dt>SLA</dt><dd>
+     @if (d.ticket.slaBreachedAt) { <span class="tag" data-tone="destructive">Breached {{ relativeTime(d.ticket.slaBreachedAt) }}</span> }
+     @else if (d.ticket.slaDueAt) { <time [attr.datetime]="d.ticket.slaDueAt" [attr.title]="fullTime(d.ticket.slaDueAt)">Due {{ relativeTime(d.ticket.slaDueAt) }}</time> }
+     @else { — }
+    </dd></div>
+   </dl>
+  </section>
+  <section class="card ticket-thread" aria-labelledby="thread-title">
+   <h2 class="sr-only" id="thread-title">Conversation</h2>
+   <div class="pad"><rs-thread [messages]="d.messages" [attachmentBase]="base() + '/attachments/'" /></div>
+   @if (state.can('ticket.reply') || state.can('ticket.note')) {
+    <div class="pad composer-wrap">
+     <rs-composer fieldId="ticket-composer" [canReply]="state.can('ticket.reply')" [canNote]="state.can('ticket.note')" [pending]="sender.pending()"
+      [uploadPath]="'/api/apps/' + encode(app()) + '/uploads'" [target]="{ type: 'ticket', id: id() }"
+      (send)="sender.send($event)" (retry)="sender.retry($event)" (check)="sender.check($event)" (discard)="sender.discard($event)" />
+     @if (sender.lastSent(); as l) { <p class="small"><a [routerLink]="['/receipts', l.operationId]">View the receipt for your {{ l.kind }}</a></p> }
+    </div>
+   }
+  </section>
   @if (state.can('observability.subject')) {
    <rs-system-context [appKey]="app()" kind="ticket" [objectId]="id()" [appName]="state.appName(app())" [messages]="d.messages"
     [customer]="{ name: customerName(d), email: null }" />

@@ -237,7 +237,7 @@ test('ticket reply, assignment and confirmed resolution', async ({ browser }) =>
  await ada.getByLabel('Change status').selectOption('closed');
  await dialog.getByRole('button', { name: 'Resolve ticket' }).click();
  await expect(ada.getByText('Status updated.')).toBeVisible();
- await expect(ada.getByRole('complementary', { name: 'Details' })).toContainText('Resolved');
+ await expect(ada.getByRole('region', { name: 'Details' })).toContainText('Resolved');
  expect((await new AxeBuilder({ page: ada }).withTags(tags).analyze()).violations).toEqual([]);
  await ada.context().close();
 });
