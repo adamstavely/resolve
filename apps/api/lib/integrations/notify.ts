@@ -11,6 +11,7 @@ import type { Queryable } from '../db';
  * reconnects; streams then tell browsers to re-read (`ready`), and staleness covers the rest.
  */
 export const CHANNEL = 'resolve_observability';
+export const LISTENER_NAME = 'resolve-observability-listener';
 
 export function notifyObservability(db: Queryable, event: Exclude<ObservabilityEvent, { type: 'ready' }>) {
  return db.query('SELECT pg_notify($1, $2)', [CHANNEL, JSON.stringify(event)]);
@@ -27,7 +28,8 @@ function bus() {
  const start = () => {
   if (client || starting) return;
   starting = true;
-  const c = new Client({ connectionString: config().DATABASE_URL });
+  // Named so operators (and the E5 drills) can find the one listener per API process.
+  const c = new Client({ connectionString: config().DATABASE_URL, application_name: LISTENER_NAME });
   const retry = () => { client = null; starting = false; emitter.emit('reconnect'); setTimeout(() => { if (emitter.listenerCount('event') > 0) start(); }, 2000); };
   c.on('error', () => { c.end().catch(() => {}); retry(); });
   c.on('notification', n => {

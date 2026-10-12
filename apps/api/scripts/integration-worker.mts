@@ -13,7 +13,8 @@ import { claim, ensureOperations, pollOnce, prune, workerId } from '../lib/integ
 import { watchReceipts } from '../lib/integrations/receipts';
 
 const owner = workerId();
-const CONCURRENCY = 4;
+// Polls in parallel per process (E5 load: about 30 polls/s per 4 lanes at 50 ms Elastic latency; scale lanes or processes).
+const CONCURRENCY = Math.min(64, Math.max(1, Number(process.env.INTEGRATION_WORKER_LANES ?? 4)));
 const pollSeconds = config().OBSERVABILITY_POLL_SECONDS;
 let stopping = false;
 process.on('SIGTERM', () => { stopping = true; });
@@ -33,7 +34,7 @@ async function lane() {
  }
 }
 
-log('info', 'integration_worker_started', { owner, pollSeconds });
+log('info', 'integration_worker_started', { owner, pollSeconds, lanes: CONCURRENCY });
 let lastPrune = 0;
 let lastReceipts = 0;
 while (!stopping) {

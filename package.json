@@ -27,6 +27,8 @@
     "db:test": "node --env-file-if-exists=.env node_modules/vitest/vitest.mjs run --config vitest.database.config.ts",
     "test:contract": "vitest run --config vitest.contract.config.ts",
     "elastic:fixtures": "node --env-file-if-exists=.env --import tsx tools/mock-elastic/record-fixtures.mts",
+    "qualify:egress": "node --env-file-if-exists=.env --import tsx tools/qualify/egress-check.mts",
+    "load:observability": "node --env-file-if-exists=.env --import tsx tools/load/observability-load.mts",
     "load:stream": "node --env-file-if-exists=.env --import tsx tools/load/stream-load.mts",
     "load:harness": "node --env-file-if-exists=.env --import tsx tools/load/stream-harness.mts",
     "check": "npm run typecheck && npm test"

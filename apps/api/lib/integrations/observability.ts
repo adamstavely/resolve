@@ -22,22 +22,45 @@ interface SnapshotRow {
  connection_revision: number; mapping_revision: number; observed_at: Date | null; fetched_at: Date; expires_at: Date; summary: AppHealth['summary'];
 }
 
-export async function fleetHealth(db: Queryable, apps: RegistryApp[], pollSeconds: number, now = Date.now()): Promise<AppHealth[]> {
- const mappings = (await db.query(
-  `SELECT m.app_key, m.environment, m.state, c.kill_switch FROM elastic_app_mappings m JOIN integration_connections c ON c.id = m.connection_id`)).rows as
-  { app_key: string; environment: string; state: string; kill_switch: boolean }[];
- const snapshots = (await db.query(
-  `SELECT DISTINCT ON (app_key, environment) * FROM observability_health_snapshots ORDER BY app_key, environment, fetched_at DESC`)).rows as SnapshotRow[];
+/**
+ * Service-level and identical for every viewer, so concurrent readers share one computation. The cache is keyed on a
+ * fingerprint of everything health depends on (latest snapshot, mappings, connections incl. the kill switch), so any
+ * change is seen at once; the short lifetime only bounds time-based staleness.
+ */
+const HEALTH_CACHE_MS = 1000;
+const healthCache = new WeakMap<object, { key: string; at: number; value: Promise<AppHealth[]> }>();
+
+export async function fleetHealth(db: Queryable, apps: RegistryApp[], pollSeconds: number, now?: number): Promise<AppHealth[]> {
+ if (now !== undefined) return computeFleetHealth(db, apps, pollSeconds, now);
+ const sig = (await db.query(`SELECT concat_ws('|', (SELECT max(fetched_at) FROM observability_health_snapshots), (SELECT max(updated_at) FROM elastic_app_mappings),
+  (SELECT max(updated_at) FROM integration_connections), (SELECT sum(revision) FROM integration_connections)) AS sig`)).rows[0].sig as string;
+ const key = `${sig}|${pollSeconds}|${apps.map(a => a.appKey).join(',')}`;
+ const hit = healthCache.get(db);
+ if (hit && hit.key === key && Date.now() - hit.at < HEALTH_CACHE_MS) return hit.value;
+ const value = computeFleetHealth(db, apps, pollSeconds, Date.now());
+ healthCache.set(db, { key, at: Date.now(), value });
+ value.catch(() => healthCache.delete(db));
+ return value;
+}
+
+async function computeFleetHealth(db: Queryable, apps: RegistryApp[], pollSeconds: number, now: number): Promise<AppHealth[]> {
+ // One indexed lookup per mapping for its latest snapshot (not a scan of all history).
+ const rows = (await db.query(
+  `SELECT m.app_key AS m_app, m.environment AS m_env, m.state AS m_state, c.kill_switch, s.*
+   FROM elastic_app_mappings m JOIN integration_connections c ON c.id = m.connection_id
+   LEFT JOIN LATERAL (SELECT * FROM observability_health_snapshots h WHERE h.app_key = m.app_key AND h.environment = m.environment ORDER BY h.fetched_at DESC LIMIT 1) s ON true
+   WHERE m.app_key = ANY($1)`, [apps.map(a => a.appKey)])).rows as (SnapshotRow & { m_app: string; m_env: string; m_state: string; kill_switch: boolean; fetched_at: Date | null })[];
+ const byApp = new Map<string, typeof rows>();
+ for (const r of rows) byApp.set(r.m_app, [...(byApp.get(r.m_app) ?? []), r]);
  const out: AppHealth[] = [];
  for (const app of apps) {
-  const mine = mappings.filter(m => m.app_key === app.appKey);
+  const mine = byApp.get(app.appKey) ?? [];
   if (mine.length === 0) { out.push(placeholder(app.appKey, '', 'not_configured')); continue; }
   for (const m of mine) {
-   if (m.state !== 'active') { out.push(placeholder(app.appKey, m.environment, 'not_configured')); continue; }
-   if (m.kill_switch) { out.push(placeholder(app.appKey, m.environment, 'kill_switch')); continue; }
-   const s = snapshots.find(x => x.app_key === app.appKey && x.environment === m.environment);
-   if (!s) { out.push(placeholder(app.appKey, m.environment, 'not_polled_yet')); continue; }
-   out.push(fromSnapshot(s, pollSeconds, now));
+   if (m.m_state !== 'active') out.push(placeholder(app.appKey, m.m_env, 'not_configured'));
+   else if (m.kill_switch) out.push(placeholder(app.appKey, m.m_env, 'kill_switch'));
+   else if (!m.fetched_at) out.push(placeholder(app.appKey, m.m_env, 'not_polled_yet'));
+   else out.push(fromSnapshot(m as SnapshotRow, pollSeconds, now));
   }
  }
  return out;

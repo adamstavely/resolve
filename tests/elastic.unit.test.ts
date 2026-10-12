@@ -260,3 +260,45 @@ describe('access (owner decision: capabilities, not tiers)', () => {
   for (const b of Object.keys(BUNDLES) as (keyof typeof BUNDLES)[]) if (b !== 'fleet-admin') expect(caps(b), b).not.toContain('observability.configure');
  });
 });
+
+describe('E5 upgrade rehearsal against recorded fixtures', () => {
+ const load = (name: string) => JSON.parse(readFileSync(new URL(`./fixtures/elastic/mock/${name}.json`, import.meta.url), 'utf8')).response.body;
+ const deep = <T>(v: T): T => JSON.parse(JSON.stringify(v));
+ test('additive fields from a newer minor version parse unchanged', () => {
+  const slo = deep(load('slo-payroll-payslip-availability'));
+  Object.assign(slo, { newTopLevel: { x: 1 } }); Object.assign(slo.summary, { fiveMinuteBurnRate: 9, newMetric: 'x' });
+  expect(parseSlo(slo)).toEqual(parseSlo(load('slo-payroll-payslip-availability')));
+  const alerts = deep(load('alerts')).hits.hits.map((h: { fields: Record<string, unknown[]> }) => { h.fields['kibana.alert.new_field'] = ['x']; return parseAlert(h.fields); });
+  expect(alerts).toEqual(load('alerts').hits.hits.map((h: { fields: Record<string, unknown[]> }) => parseAlert(h.fields)));
+  const cases = deep(load('cases')).cases.map((c: Record<string, unknown>) => parseCase({ ...c, assignees: [], category: 'new' }));
+  expect(cases).toEqual(load('cases').cases.map(parseCase));
+ });
+ test('a removed or retyped field is dropped and counted, never guessed', async () => {
+  const { alertResultSchema, caseResultSchema, sloResultSchema, subjectEventSchema } = await import('../packages/contracts/src');
+  const slo = deep(load('slo-payroll-payslip-availability')); slo.summary.status = 'HEALTHY_V2';
+  expect(sloResultSchema.safeParse(parseSlo(slo)).success).toBe(false);
+  const alert = deep(load('alerts')).hits.hits[0].fields; delete alert['kibana.alert.start'];
+  expect(alertResultSchema.safeParse(parseAlert(alert)).success).toBe(false);
+  const c = deep(load('cases')).cases[0]; c.status = 3;
+  expect(caseResultSchema.safeParse(parseCase(c)).success).toBe(false);
+  const ev = deep(load('apm-subject')).hits.hits[0].fields; delete ev['service.name'];
+  expect(subjectEventSchema.safeParse(parseSubjectEvent(ev, 'APM')).success).toBe(false);
+  // Dropped items surface as missing data: health reports unknown components, not passes.
+  const syn = deep(load('synthetics')).aggregations;
+  for (const m of syn.monitors.buckets) for (const l of m.locations.buckets) delete l.latest.hits.hits[0].fields['monitor.status'];
+  expect(parseSyntheticsAggs(syn).every(r => !(r as { status?: unknown }).status)).toBe(true);
+ });
+});
+
+describe('E5 egress classification', () => {
+ test('only loopback and private space pass; public, metadata and unresolved hosts fail', async () => {
+  const { classify, verdict } = await import('../tools/qualify/egress.mts');
+  expect(['127.0.0.1', '::1'].map(classify)).toEqual(['loopback', 'loopback']);
+  expect(['10.1.2.3', '172.20.0.1', '192.168.4.4', '100.64.1.1', 'fd12::1', '::ffff:10.0.0.1'].map(classify)).toEqual(Array(6).fill('private'));
+  expect(['8.8.8.8', '172.32.0.1', '2606:4700::1111'].map(classify)).toEqual(['public', 'public', 'public']);
+  expect(['169.254.169.254', '0.0.0.0', 'fe80::1'].map(classify)).toEqual(['invalid', 'invalid', 'invalid']);
+  expect(verdict(['private', 'loopback'])).toBe('ok');
+  expect(verdict(['private', 'public'])).toBe('public');
+  expect(verdict([])).toBe('unresolved');
+ });
+});
