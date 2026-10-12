@@ -14,9 +14,9 @@ export const TENANT_PROTOCOL_PATH = '/api/resolve/protocol';
 export const TARGET_PROTOCOL = 1;
 export const TARGET_TOOL_VERSIONS = {
  list_tickets: 2,          // + cursor / nextCursor / hasMore (QB-TICKET-1)
- get_ticket: 1,
- list_conversations: 1,
- get_conversation: 2,      // detail visibility = list visibility (QB-CHAT-4); attachments, team, links (QB-CHAT-5)
+ get_ticket: 2,           // + version for version-checked actions
+ list_conversations: 2,    // + shared unread state, version
+ get_conversation: 2,      // detail visibility = list visibility (QB-CHAT-4); attachments, team, links, version (QB-CHAT-5)
  get_support_dashboard: 1, // QB-DASH-1
  list_support_activity: 1, // QB-DASH-2
 } as const;
@@ -62,18 +62,21 @@ const activityEntry = z.object({
 export const targetToolResults = {
  list_tickets: z.object({ tickets: z.array(ticketSummary), nextCursor: z.string().nullable(), hasMore: z.boolean() }),
  get_ticket: z.object({
-  ticket: toolResults.get_ticket.shape.ticket.extend({ assigneeName: z.string().nullable(), teamName: z.string().nullable(), slaDueAt: ts.nullable(), slaBreachedAt: ts.nullable() }),
+  ticket: toolResults.get_ticket.shape.ticket.extend({ assigneeName: z.string().nullable(), teamName: z.string().nullable(), slaDueAt: ts.nullable(), slaBreachedAt: ts.nullable(), version: z.number().int().nonnegative() }),
   messages: z.array(threadMessage), hasMore: z.boolean(), nextCursor: z.string().nullable(),
  }),
  list_conversations: z.object({
   conversations: z.array(toolResults.list_conversations.shape.conversations.element.extend({
    assigneeName: z.string().nullable(), teamName: z.string().nullable(), waitingSince: ts.nullable(), visitorName: z.string().nullable(),
+   /** Shared support-team unread watermark (owner decision: not per agent). */
+   unread: z.boolean(), version: z.number().int().nonnegative(),
   })),
   nextCursor: z.string().nullable(), hasMore: z.boolean(),
  }),
  get_conversation: z.object({
   conversation: toolResults.get_conversation.shape.conversation.extend({
    assigneeName: z.string().nullable(), teamName: z.string().nullable(), visitorName: z.string().nullable(), waitingSince: ts.nullable(), linkedTicketId: z.string().nullable(),
+   unread: z.boolean(), version: z.number().int().nonnegative(),
   }),
   messages: z.array(threadMessage), hasMore: z.boolean(), nextCursor: z.string().nullable(),
  }),

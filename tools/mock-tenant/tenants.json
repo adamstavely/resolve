@@ -118,7 +118,10 @@
    "role": "agent",
    "teams": [
     "billing"
-   ]
+   ],
+   "roles": {
+    "hr": "observer"
+   }
   },
   "mock|sam-imposter": {
    "role": "agent",
@@ -127,5 +130,5 @@
    ]
   }
  },
- "_comment": "Development fixture. people: tenant role and teams per IdP subject (anyone else is a portal user with no team access)."
+ "_comment": "Development fixture. people: tenant role and teams per IdP subject (anyone else is a portal user with no team access). roles: per-tenant role override (Bo is an observer in HR, so HR refuses his writes even though Resolve allows them)."
 }

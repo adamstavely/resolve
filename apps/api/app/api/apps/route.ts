@@ -22,7 +22,7 @@ export async function GET(request: Request) {
   apps: await Promise.all(reg.apps.map(async a => {
    const g = grants.get(a.appKey);
    // Probing would wake a dormant app or contact an unavailable one, so those are reported as not checked.
-   const health = isServable(a) && !a.dormant ? await tenantHealth(a) : { status: 'not_checked' as const, reasons: [], checkedAt: null };
+   const health = isServable(a) && !a.dormant ? await tenantHealth(a).then(({ tools: _t, ...h }) => h) : { status: 'not_checked' as const, reasons: [], checkedAt: null };
    return { appKey: a.appKey, displayName: a.displayName, state: a.state, servable: isServable(a), dormant: a.dormant, health,
     connection: { state: g?.state ?? 'not_connected', scopes: g?.scopes ?? [], tenantUserId: g?.tenantUserId ?? null } };
   })),

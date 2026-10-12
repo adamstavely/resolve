@@ -15,6 +15,7 @@ import { readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createLocalJWKSet, createRemoteJWKSet, exportJWK, generateKeyPair, jwtVerify, SignJWT, type JWK } from 'jose';
 import { buildTenant, callTool, ToolError, type Viewer } from './fixtures.mjs';
+import { TenantStore } from './actions.mjs';
 
 if (process.env.NODE_ENV === 'production') throw new Error('The mock tenants must never run in production');
 
@@ -23,7 +24,7 @@ interface TenantConfig {
  seed: number; tickets: number; conversations: number; analyticsRoles: string[];
  idpClient: { id: string; secret: string }; resolveClient: { id: string; secret: string };
 }
-const fleet: { registryPort: number; tenants: TenantConfig[]; people: Record<string, { role: Viewer['role']; teams: string[] }> } = JSON.parse(readFileSync(new URL('./tenants.json', import.meta.url), 'utf8'));
+const fleet: { registryPort: number; tenants: TenantConfig[]; people: Record<string, { role: Viewer['role']; teams: string[]; roles?: Record<string, Viewer['role']> }> } = JSON.parse(readFileSync(new URL('./tenants.json', import.meta.url), 'utf8'));
 const idp = new URL(required('OIDC_ISSUER')).origin;
 const resolveRedirect = `${new URL(required('RESOLVE_ORIGIN')).origin}/api/connect/callback`;
 const registryToken = required('REGISTRY_TOKEN');
@@ -32,6 +33,7 @@ const idpKeys = createRemoteJWKSet(new URL(`${idp}/jwks`), { cooldownDuration: 0
 /** Scopes the tenant will grant to Resolve (the fork's vocabulary plus OIDC). */
 const SUPPORTED_SCOPES = ['openid', 'offline_access', 'read:feedback', 'write:feedback', 'write:changelog', 'read:article', 'write:article', 'read:chat', 'write:chat', 'read:settings', 'write:settings'];
 const ACCESS_SECONDS = 300;
+const WRITE_TOOLS = new Set(['reply_to_conversation', 'add_conversation_note', 'assign_conversation', 'set_conversation_status', 'mark_conversation_read', 'reply_to_ticket', 'add_ticket_note', 'assign_ticket', 'set_ticket_status']);
 
 function required(name: string) {
  const v = process.env[name];
@@ -77,11 +79,14 @@ async function startTenant(t: TenantConfig) {
  };
 
  // Support data. Staff are the configured people (by their tenant principal) plus two fictional agents.
- const people = Object.entries(fleet.people).map(([sub, p]) => ({ ...p, user: userFor(idp, sub, sub) }));
+ // A person's role can differ per tenant (roles override), so Resolve capabilities and tenant permissions can disagree.
+ const people = Object.entries(fleet.people).map(([sub, p]) => ({ ...p, role: p.roles?.[t.appKey] ?? p.role, user: userFor(idp, sub, sub) }));
  const names: Record<string, string> = { 'mock|ada': 'Ada Admin', 'mock|sam': 'Sam Agent', 'mock|olive': 'Olive Observer', 'mock|bo': 'Bo Blockable', 'mock|sam-imposter': 'Sam Duplicate' };
  const staff = [...people.filter(p => p.role === 'agent').map(p => ({ principalId: p.user.principalId, name: names[p.user.idpSub] ?? p.user.idpSub })),
   { principalId: 'principal_priya', name: 'Priya Shah' }, { principalId: 'principal_tom', name: 'Tom Okafor' }];
  const data = buildTenant(t.appKey, t.seed, { tickets: t.tickets, conversations: t.conversations }, staff);
+ const nameOf = (principalId: string) => staff.find(s => s.principalId === principalId)?.name ?? people.find(p => p.user.principalId === principalId)?.user.idpSub ?? 'Agent';
+ const store = new TenantStore(t.appKey, data, nameOf);
  const viewerFor = (tenantUserId: string): Viewer => {
   const p = people.find(x => x.user.id === tenantUserId);
   if (!p) return { principalId: 'principal_' + tenantUserId.slice(5), role: 'portal', teams: [], analytics: false };
@@ -89,7 +94,7 @@ async function startTenant(t: TenantConfig) {
  };
  const stats = { toolCalls: 0, protocolCalls: 0 };
  /** Development fault injection for partial-failure tests: tool calls by one user (IdP subject) fail or hang. */
- const failFor = new Map<string, 'error' | 'timeout'>();
+ const failFor = new Map<string, 'error' | 'timeout' | 'drop'>();
 
  /** Minimal MCP JSON-RPC endpoint: tools/call for the gap-fixed read tools, results as JSON text content (as Quackback does). */
  async function mcp(req: IncomingMessage, res: ServerResponse) {
@@ -104,14 +109,28 @@ async function startTenant(t: TenantConfig) {
   if (failMode === 'timeout') await new Promise(r => setTimeout(r, 8000));
   const reply = (result: unknown) => send(res, 200, { jsonrpc: '2.0', id: rpc.id ?? null, result });
   if (rpc.method !== 'tools/call') return send(res, 200, { jsonrpc: '2.0', id: rpc.id ?? null, error: { code: -32601, message: 'Method not found' } });
-  if (!String(payload.scope).split(' ').includes('read:chat')) {
-   res.writeHead(403, { 'WWW-Authenticate': 'Bearer error="insufficient_scope", scope="read:chat"', 'Content-Type': 'application/json' });
+  const tool = String(rpc.params?.name);
+  const needed = WRITE_TOOLS.has(tool) ? 'write:chat' : 'read:chat';
+  if (!String(payload.scope).split(' ').includes(needed)) {
+   res.writeHead(403, { 'WWW-Authenticate': `Bearer error="insufficient_scope", scope="${needed}"`, 'Content-Type': 'application/json' });
    return res.end(JSON.stringify({ error: 'insufficient_scope' }));
   }
   const viewer = viewerFor(String(payload.sub));
   if (viewer.role === 'portal') return reply({ isError: true, content: [{ type: 'text', text: 'Error: This operation requires a team member (admin or member) role.' }] });
   try {
-   reply({ content: [{ type: 'text', text: JSON.stringify(callTool(data, viewer, String(rpc.params?.name), rpc.params?.arguments ?? {})) }] });
+   const args = rpc.params?.arguments ?? {};
+   let result: unknown;
+   if (tool === 'list_changes') {
+    result = store.changes(viewer, args.after);
+    const wait = Math.min(Number(args.waitSeconds ?? 0), 25);
+    if (wait > 0 && (result as { events: unknown[]; resync: boolean }).events.length === 0 && !(result as { resync: boolean }).resync) {
+     await store.waitForChange(wait * 1000);
+     result = store.changes(viewer, args.after);
+    }
+   } else result = store.call(viewer, tool, args) ?? callTool(data, viewer, tool, args);
+   // Fault injection: the write committed, but the response is lost.
+   if (failMode === 'drop' && WRITE_TOOLS.has(tool)) { res.socket?.destroy(); return; }
+   reply({ content: [{ type: 'text', text: JSON.stringify(result) }] });
   } catch (e) {
    if (e instanceof ToolError) return reply({ isError: true, content: [{ type: 'text', text: `Error: ${e.code}: ${e.message}` }] });
    throw e;
@@ -222,13 +241,17 @@ async function startTenant(t: TenantConfig) {
    if (req.method === 'POST' && url.pathname === '/api/mcp') return await mcp(req, res);
    if (req.method === 'GET' && url.pathname === '/api/resolve/protocol') {
     stats.protocolCalls++;
-    return send(res, 200, { protocolVersions: [1], tools: { list_tickets: 2, get_ticket: 1, list_conversations: 1, get_conversation: 2, get_support_dashboard: 1, list_support_activity: 1 } });
+    return send(res, 200, { protocolVersions: [1], tools: {
+     list_tickets: 2, get_ticket: 2, list_conversations: 2, get_conversation: 2, get_support_dashboard: 1, list_support_activity: 1,
+     reply_to_conversation: 2, add_conversation_note: 1, assign_conversation: 1, set_conversation_status: 2, mark_conversation_read: 1,
+     reply_to_ticket: 2, add_ticket_note: 2, assign_ticket: 1, set_ticket_status: 1, get_operation_result: 1, list_changes: 1 } });
    }
    if (req.method === 'GET' && url.pathname === '/dev/stats') return send(res, 200, stats);
+   if (req.method === 'POST' && url.pathname === '/dev/customer-message') { const b = JSON.parse(await body(req)); return send(res, 200, store.customerMessage(b.conversationId, String(b.text ?? 'Hello'), b.team)); }
    if (req.method === 'POST' && url.pathname === '/dev/fail') {
     const { mode, sub } = JSON.parse(await body(req));
     const id = userFor(idp, String(sub), '').id;
-    if (mode === 'error' || mode === 'timeout') failFor.set(id, mode); else failFor.delete(id);
+    if (mode === 'error' || mode === 'timeout' || mode === 'drop') failFor.set(id, mode); else failFor.delete(id);
     return send(res, 200, { sub, mode: failFor.get(id) ?? null });
    }
    if (req.method === 'POST' && url.pathname === '/dev/reset-stats') { stats.toolCalls = 0; stats.protocolCalls = 0; return send(res, 200, stats); }

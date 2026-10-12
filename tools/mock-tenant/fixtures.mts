@@ -6,17 +6,19 @@
 import { createHash } from 'node:crypto';
 
 export interface Viewer { principalId: string; role: 'admin' | 'agent' | 'observer' | 'portal'; teams: string[]; analytics: boolean }
-interface Message { id: string; senderType: 'visitor' | 'agent' | 'system'; isInternal: boolean; authorName: string | null; content: string; createdAt: string; attachments: { id: string; name: string; contentType: string; size: number }[] }
+export interface Message { id: string; senderType: 'visitor' | 'agent' | 'system'; isInternal: boolean; authorName: string | null; content: string; createdAt: string; attachments: { id: string; name: string; contentType: string; size: number }[] }
 interface Staff { principalId: string; name: string }
-interface Ticket {
+export interface Ticket {
  id: string; number: number; reference: string; type: 'customer' | 'back_office' | 'tracker'; title: string; status: string; statusCategory: 'open' | 'pending' | 'closed';
  stage: string; priority: 'none' | 'low' | 'medium' | 'high' | 'urgent'; requesterPrincipalId: string | null; assigneePrincipalId: string | null; assigneeName: string | null;
- assigneeTeamId: string | null; teamName: string | null; createdAt: string; updatedAt: string; dueAt: string | null; slaDueAt: string | null; slaBreachedAt: string | null; messages: Message[];
+ assigneeTeamId: string | null; teamName: string | null; createdAt: string; updatedAt: string; dueAt: string | null; slaDueAt: string | null; slaBreachedAt: string | null; messages: Message[]; version: number;
 }
-interface Conversation {
+export interface Conversation {
  id: string; status: 'open' | 'snoozed' | 'closed'; priority: Ticket['priority']; channel: string; subject: string | null; visitorPrincipalId: string; visitorName: string;
  visitorEmail: string | null; assignedAgentPrincipalId: string | null; assigneeName: string | null; teamId: string | null; teamName: string | null; waitingSince: string | null;
  linkedTicketId: string | null; lastMessageAt: string; resolvedAt: string | null; createdAt: string; messages: Message[];
+ /** Shared support-team read watermark. */
+ lastReadAt: string | null; version: number;
 }
 
 const TEAMS = [{ id: 'team_support', key: 'support', name: 'Support' }, { id: 'team_billing', key: 'billing', name: 'Billing' }];
@@ -58,7 +60,7 @@ export function buildTenant(appKey: string, seed: number, counts: { tickets: num
    title: pick(TITLES), status: STATUS[category][0], statusCategory: category, stage: STATUS[category][1], priority: pick(['none', 'low', 'medium', 'high', 'urgent'] as const),
    requesterPrincipalId: `principal_customer_${(n % CUSTOMERS.length) + 1}`, assigneePrincipalId: assignee?.principalId ?? null, assigneeName: assignee?.name ?? null,
    assigneeTeamId: assignRoll < 0.8 ? t.id : null, teamName: assignRoll < 0.8 ? t.name : null, createdAt: created, updatedAt: updated, dueAt: null, slaDueAt,
-   slaBreachedAt: slaDueAt && Date.parse(slaDueAt) < now ? slaDueAt : null, messages,
+   slaBreachedAt: slaDueAt && Date.parse(slaDueAt) < now ? slaDueAt : null, messages, version: 1,
   };
  });
 
@@ -72,7 +74,7 @@ export function buildTenant(appKey: string, seed: number, counts: { tickets: num
    visitorPrincipalId: `principal_customer_${(n % CUSTOMERS.length) + 1}`, visitorName: customer, visitorEmail: `${customer.split(' ')[0].toLowerCase()}@example.test`,
    assignedAgentPrincipalId: assignee?.principalId ?? null, assigneeName: assignee?.name ?? null, teamId: t.id, teamName: t.name,
    waitingSince: waiting ? last : null, linkedTicketId: r() < 0.2 ? `ticket_${appKey}_${1 + Math.floor(r() * counts.tickets)}` : null,
-   lastMessageAt: last, resolvedAt: status === 'closed' ? last : null, createdAt: created,
+   lastMessageAt: last, resolvedAt: status === 'closed' ? last : null, createdAt: created, lastReadAt: waiting ? null : last, version: 1,
    messages: [msg(`cmsg_${appKey}_${n}_0`, created, 'visitor', customer, 'Hi, I need help with my account.'),
     msg(`cmsg_${appKey}_${n}_1`, last, waiting ? 'visitor' : 'agent', waiting ? customer : (assignee?.name ?? 'Support'), waiting ? 'Any update on this?' : 'This is sorted now.')],
   };
@@ -84,6 +86,8 @@ export type TenantData = ReturnType<typeof buildTenant>;
 
 const teamKey = (teamId: string | null) => TEAMS.find(t => t.id === teamId)?.key;
 /** One object policy for lists, detail and aggregates (QB-CHAT-4 fixed): admin, own assignment, or own team. */
+export const teamKeyOf = (teamId: string | null) => TEAMS.find(t => t.id === teamId)?.key;
+export const TEAM_LIST = TEAMS;
 export const canSeeTicket = (v: Viewer, t: Ticket) => v.role === 'admin' || t.assigneePrincipalId === v.principalId || v.teams.includes(teamKey(t.assigneeTeamId) ?? '');
 export const canSeeConversation = (v: Viewer, c: Conversation) => v.role === 'admin' || c.assignedAgentPrincipalId === v.principalId || v.teams.includes(teamKey(c.teamId) ?? '');
 
@@ -101,10 +105,13 @@ function page<T>(items: T[], key: (x: T) => [string, string], cursor: string | u
 }
 
 const ticketSummary = ({ messages: _m, slaDueAt: _s, slaBreachedAt: _b, createdAt: _c, dueAt: _d, ...t }: Ticket) => t;
+/** Unread for the support team: a customer message newer than the shared read watermark. */
+export const isUnread = (c: Conversation) => c.messages.some(m => m.senderType === 'visitor' && (!c.lastReadAt || m.createdAt > c.lastReadAt));
 const conversationSummary = (c: Conversation) => ({ id: c.id, status: c.status, priority: c.priority, channel: c.channel, subject: c.subject, lastMessageAt: c.lastMessageAt,
- visitorPrincipalId: c.visitorPrincipalId, assignedAgentPrincipalId: c.assignedAgentPrincipalId, assigneeName: c.assigneeName, teamName: c.teamName, waitingSince: c.waitingSince, visitorName: c.visitorName });
+ visitorPrincipalId: c.visitorPrincipalId, assignedAgentPrincipalId: c.assignedAgentPrincipalId, assigneeName: c.assigneeName, teamName: c.teamName, waitingSince: c.waitingSince,
+ visitorName: c.visitorName, unread: isUnread(c), version: c.version });
 
-export class ToolError extends Error { constructor(readonly code: 'NOT_FOUND' | 'FORBIDDEN' | 'INVALID_ARGUMENT', message: string) { super(message); } }
+export class ToolError extends Error { constructor(readonly code: 'NOT_FOUND' | 'FORBIDDEN' | 'INVALID_ARGUMENT' | 'CONFLICT' | 'OPERATION_CONFLICT', message: string) { super(message); } }
 
 type Args = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
@@ -139,8 +146,8 @@ export function callTool(data: TenantData, v: Viewer, name: string, a: Args, now
   case 'get_conversation': {
    const c = conversations.find(x => x.id === a.conversationId);
    if (!c) throw new ToolError('NOT_FOUND', 'Conversation not found');
-   const { messages, teamId: _t, ...rest } = c;
-   return { conversation: rest, messages, hasMore: false, nextCursor: null };
+   const { messages, teamId: _t, lastReadAt: _r, ...rest } = c;
+   return { conversation: { ...rest, unread: isUnread(c) }, messages, hasMore: false, nextCursor: null };
   }
   case 'get_support_dashboard': {
    const horizon = num(a.warningHorizonMinutes, 30, 1440);

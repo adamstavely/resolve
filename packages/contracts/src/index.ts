@@ -15,5 +15,6 @@ export * from './outcomes';
 export * from './fleet';
 export * from './broadcasts';
 export * from './fleet-read';
+export * from './operations';
 export * from './session';
 export * from './admin';

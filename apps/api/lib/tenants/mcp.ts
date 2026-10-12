@@ -1,4 +1,4 @@
-import { targetToolArgs, targetToolResults, type TargetTool, type RegistryApp } from '@resolve/contracts';
+import { actionToolArgs, actionToolResults, targetToolArgs, targetToolResults, type ActionTool, type RegistryApp, type TargetTool } from '@resolve/contracts';
 import type { z } from 'zod';
 import { pool } from '../db';
 import { sealer } from '../sealer';
@@ -6,19 +6,31 @@ import { accessToken, setGrantState } from './grants';
 import { refresher } from './oauth';
 
 /*
- * Tenant tool client: calls a tenant MCP tool as the signed-in human, with their own grant (plan 01: mutations
- * and reads always use the human's token; no service principal). Results are validated against the target
- * contract; a response that does not match is a tenant error, not data.
+ * Tenant tool client: calls a tenant MCP tool as the signed-in human, with their own grant (plan 01: reads and
+ * mutations always use the human's token; no service principal). Results are validated against the contract;
+ * a response that does not match is a tenant error, not data.
  */
-export type ToolFailure = 'not_connected' | 'reconnect_required' | 'denied' | 'not_found' | 'timeout' | 'tenant_error';
-export type ToolOutcome<T> = { ok: true; data: T } | { ok: false; reason: ToolFailure };
+type Tool = TargetTool | ActionTool;
+const ARGS = { ...targetToolArgs, ...actionToolArgs } as Record<Tool, z.ZodType>;
+const RESULTS = { ...targetToolResults, ...actionToolResults } as Record<Tool, z.ZodType>;
+type ResultOf<K extends Tool> = K extends TargetTool ? z.infer<(typeof targetToolResults)[K]> : K extends ActionTool ? z.infer<(typeof actionToolResults)[K]> : never;
+type ArgsOf<K extends Tool> = K extends TargetTool ? z.input<(typeof targetToolArgs)[K]> : K extends ActionTool ? z.input<(typeof actionToolArgs)[K]> : never;
 
-export async function callTenantTool<K extends TargetTool>(app: RegistryApp, userId: string, tool: K, args: z.input<(typeof targetToolArgs)[K]>,
- timeoutMs = 4000): Promise<ToolOutcome<z.infer<(typeof targetToolResults)[K]>>> {
- const parsedArgs = targetToolArgs[tool].parse(args);
+/**
+ * Raw RPC outcome. `sent` distinguishes "the tenant never received it" (safe to report as failed) from
+ * "the tenant may have processed it" (an uncertain outcome for writes).
+ */
+export type RpcOutcome<T> =
+ | { kind: 'ok'; data: T }
+ | { kind: 'tool_error'; code: string; message: string }
+ | { kind: 'not_connected' | 'reconnect_required' | 'denied' }
+ | { kind: 'not_sent' }
+ | { kind: 'unknown'; detail: 'timeout' | 'server_error' | 'connection_lost' | 'invalid_response' };
+
+export async function rpc<K extends Tool>(app: RegistryApp, userId: string, tool: K, args: ArgsOf<K>, timeoutMs = 4000): Promise<RpcOutcome<ResultOf<K>>> {
+ const parsedArgs = ARGS[tool].parse(args);
  const token = await accessToken(pool(), sealer(), userId, app.appKey, refresher(app));
- if (token.status !== 'ok') return { ok: false, reason: token.status === 'unavailable' ? 'tenant_error' : token.status };
-
+ if (token.status !== 'ok') return token.status === 'unavailable' ? { kind: 'not_sent' } : { kind: token.status };
  let r: Response;
  try {
   r = await fetch(`${app.supportOrigin}/api/mcp`, {
@@ -27,21 +39,44 @@ export async function callTenantTool<K extends TargetTool>(app: RegistryApp, use
    body: JSON.stringify({ jsonrpc: '2.0', id: crypto.randomUUID(), method: 'tools/call', params: { name: tool, arguments: parsedArgs } }),
   });
  } catch (e) {
-  return { ok: false, reason: (e as Error)?.name === 'TimeoutError' ? 'timeout' : 'tenant_error' };
+  const err = e as Error & { cause?: { code?: string } };
+  if (err.name === 'TimeoutError') return { kind: 'unknown', detail: 'timeout' };
+  if (['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN'].includes(err.cause?.code ?? '')) return { kind: 'not_sent' };
+  return { kind: 'unknown', detail: 'connection_lost' };
  }
- if (r.status === 401) { await setGrantState(pool(), userId, app.appKey, 'reconnect_required', 'tenant_rejected_token'); return { ok: false, reason: 'reconnect_required' }; }
- if (r.status === 403) return { ok: false, reason: 'denied' };
- if (!r.ok) return { ok: false, reason: 'tenant_error' };
- const rpc = await r.json().catch(() => null) as { result?: { isError?: boolean; content?: { type: string; text: string }[] } } | null;
- const text = rpc?.result?.content?.find(c => c.type === 'text')?.text ?? '';
- if (!rpc?.result) return { ok: false, reason: 'tenant_error' };
- if (rpc.result.isError) return { ok: false, reason: /NOT_FOUND/.test(text) ? 'not_found' : /FORBIDDEN|team member|permission/i.test(text) ? 'denied' : 'tenant_error' };
+ // 401/403 are answered before the tool runs.
+ if (r.status === 401) { await setGrantState(pool(), userId, app.appKey, 'reconnect_required', 'tenant_rejected_token'); return { kind: 'reconnect_required' }; }
+ if (r.status === 403) return { kind: 'denied' };
+ if (!r.ok) return { kind: 'unknown', detail: 'server_error' };
+ let body: { result?: { isError?: boolean; content?: { type: string; text: string }[] } } | null;
+ try { body = await r.json(); } catch { return { kind: 'unknown', detail: 'connection_lost' }; }
+ const text = body?.result?.content?.find(c => c.type === 'text')?.text ?? '';
+ if (!body?.result) return { kind: 'unknown', detail: 'invalid_response' };
+ if (body.result.isError) {
+  const code = text.match(/^Error: ([A-Z_]+):/)?.[1] ?? (/team member|permission/i.test(text) ? 'FORBIDDEN' : 'TOOL_ERROR');
+  return { kind: 'tool_error', code, message: text.replace(/^Error: (?:[A-Z_]+: )?/, '') };
+ }
  let json: unknown;
- try { json = JSON.parse(text); } catch { return { ok: false, reason: 'tenant_error' }; }
- const data = targetToolResults[tool].safeParse(json);
+ try { json = JSON.parse(text); } catch { return { kind: 'unknown', detail: 'invalid_response' }; }
+ const data = RESULTS[tool].safeParse(json);
  if (!data.success) {
   console.warn(JSON.stringify({ level: 'warn', event: 'tenant_contract_mismatch', app: app.appKey, tool, issue: data.error.issues[0]?.path.join('.') }));
-  return { ok: false, reason: 'tenant_error' };
+  return { kind: 'unknown', detail: 'invalid_response' };
  }
- return { ok: true, data: data.data as z.infer<(typeof targetToolResults)[K]> };
+ return { kind: 'ok', data: data.data as ResultOf<K> };
+}
+
+/** Read outcome, as used by fleet fan-out and read routes. */
+export type ToolFailure = 'not_connected' | 'reconnect_required' | 'denied' | 'not_found' | 'timeout' | 'tenant_error';
+export type ToolOutcome<T> = { ok: true; data: T } | { ok: false; reason: ToolFailure };
+
+export async function callTenantTool<K extends TargetTool>(app: RegistryApp, userId: string, tool: K, args: ArgsOf<K>, timeoutMs = 4000): Promise<ToolOutcome<ResultOf<K>>> {
+ const o = await rpc(app, userId, tool, args, timeoutMs);
+ switch (o.kind) {
+  case 'ok': return { ok: true, data: o.data };
+  case 'not_connected': case 'reconnect_required': case 'denied': return { ok: false, reason: o.kind };
+  case 'tool_error': return { ok: false, reason: o.code === 'NOT_FOUND' ? 'not_found' : o.code === 'FORBIDDEN' ? 'denied' : 'tenant_error' };
+  case 'unknown': return { ok: false, reason: o.detail === 'timeout' ? 'timeout' : 'tenant_error' };
+  default: return { ok: false, reason: 'tenant_error' };
+ }
 }
