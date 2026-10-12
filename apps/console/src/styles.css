@@ -14,3 +14,6 @@ h1 {font-size:clamp(28px,5vw,42px);letter-spacing:-1.5px;line-height:1.15;margin
 .btn:hover {background:var(--inset);} .btn-primary {background:var(--accent);border-color:var(--accent);color:var(--on-accent);} .btn-primary:hover {background:var(--accent);filter:brightness(1.08);}
 label.row {gap:8px;}
 @media (prefers-reduced-motion: reduce) {*,*::before,*::after {transition-duration:0s!important;animation-duration:0s!important;}}
+a.btn {text-decoration:none;min-height:var(--control-h);} .who {font-weight:550;} header form {margin:0;}
+.notice {padding:12px 16px;border:1px solid var(--control-line);border-radius:9px;background:var(--surface);} .caps {margin:0;padding-left:20px;}
+header .row {flex-wrap:wrap;}

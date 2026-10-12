@@ -5,6 +5,7 @@
   },
   "include": [
     "packages/**/*.ts",
-    "packages/**/*.tsx"
+    "packages/**/*.tsx",
+    "tools/**/*.mts"
   ]
 }

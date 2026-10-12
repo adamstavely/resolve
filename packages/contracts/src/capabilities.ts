@@ -26,7 +26,7 @@ export interface Capability {
 export const CAPABILITIES = {
  'fleet.view': { summary: 'See registered apps, health and own connection state', kind: 'read', confirmation: 'none', tools: [], jobs: [], phase: 1 },
  'connection.manage': { summary: 'Connect and reconnect own per-app grants', kind: 'mutation', confirmation: 'none', tools: [], jobs: [], phase: 1 },
- 'dashboard.view': { summary: 'First-pass KPI cards and recent activity (plan 11)', kind: 'read', confirmation: 'none', tools: ['get_support_dashboard', 'list_support_activity'], jobs: [], phase: 2 },
+ 'dashboard.view': { summary: 'First-pass KPI cards and recent activity', kind: 'read', confirmation: 'none', tools: ['get_support_dashboard', 'list_support_activity'], jobs: [], phase: 2 },
  'chat.read': { summary: 'Unified chat queue, threads and attachments', kind: 'read', confirmation: 'none', tools: ['list_conversations', 'get_conversation', 'subscribe_changes', 'get_attachment'], jobs: [], phase: 2 },
  'chat.reply': { summary: 'Reply to customers, with attachments', kind: 'mutation', confirmation: 'none', tools: ['reply_to_conversation', 'upload_file', 'get_operation_result'], jobs: [], phase: 3 },
  'chat.note': { summary: 'Add internal notes', kind: 'mutation', confirmation: 'none', tools: ['add_conversation_note', 'upload_file', 'get_operation_result'], jobs: [], phase: 3 },
@@ -38,12 +38,12 @@ export const CAPABILITIES = {
  'ticket.note': { summary: 'Internal ticket notes', kind: 'mutation', confirmation: 'none', tools: ['add_ticket_note', 'upload_file', 'get_operation_result'], jobs: [], phase: 3 },
  'ticket.assign': { summary: 'Assign tickets', kind: 'mutation', confirmation: 'none', tools: ['assign_ticket'], jobs: [], phase: 3 },
  'ticket.status': { summary: 'Change ticket status', kind: 'mutation', confirmation: 'none', tools: ['set_ticket_status'], jobs: [], phase: 3 },
- 'app.register': { summary: 'Register applications and save onboarding drafts (plan 07)', kind: 'administration', confirmation: 'none', tools: [], jobs: [], phase: 4 },
+ 'app.register': { summary: 'Register applications and save onboarding drafts', kind: 'administration', confirmation: 'none', tools: [], jobs: [], phase: 4 },
  'app.provision': { summary: 'Dispatch create/connect and validation for a reviewed revision', kind: 'administration', confirmation: 'review', tools: [], jobs: ['provision', 'validate'], phase: 4 },
  'app.activate': { summary: 'Activate a validated instance for normal routing', kind: 'administration', confirmation: 'confirm', tools: [], jobs: ['activate'], phase: 4 },
  'app.lifecycle': { summary: 'Suspend and resume instances', kind: 'administration', confirmation: 'confirm', tools: [], jobs: ['suspend', 'resume'], phase: 4 },
  'roles.manage': { summary: 'Role bundles and per-app team mappings', kind: 'administration', confirmation: 'review', tools: [], jobs: ['apply_entitlements'], phase: 4 },
- 'broadcast.publish': { summary: 'Publish Everyone banners to all or selected apps (plan 08)', kind: 'mutation', confirmation: 'review', tools: ['list_announcements', 'upsert_announcement', 'archive_announcement'], jobs: [], phase: 5 },
+ 'broadcast.publish': { summary: 'Publish Everyone banners to all or selected apps', kind: 'mutation', confirmation: 'review', tools: ['list_announcements', 'upsert_announcement', 'archive_announcement'], jobs: [], phase: 5 },
  'audit.read': { summary: 'Read Resolve operation audit', kind: 'read', confirmation: 'none', tools: [], jobs: [], phase: 1 },
 } as const satisfies Record<string, Capability>;
 export type CapabilityId = keyof typeof CAPABILITIES;

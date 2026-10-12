@@ -1,8 +1,14 @@
-import { Component, CUSTOM_ELEMENTS_SCHEMA, signal } from '@angular/core';
-import { healthSchema } from '../../../../packages/contracts/src/index';
+import { Component, CUSTOM_ELEMENTS_SCHEMA, computed, signal } from '@angular/core';
+import { BUNDLE_LABELS, CAPABILITIES, healthSchema, sessionResponseSchema, type SessionResponse } from '../../../../packages/contracts/src/index';
 import { RESOLVE_ELEMENTS } from './elements';
 
 type Density = 'compact' | 'balanced' | 'spacious';
+
+const SIGNIN_MESSAGES: Record<string, { text: string; alert: boolean }> = {
+ failed: { text: 'Sign-in did not complete. Try again; if it keeps failing, contact support.', alert: true },
+ denied: { text: 'Your account is disabled in Resolve. Contact an administrator.', alert: true },
+ 'signed-out': { text: 'You have signed out.', alert: false },
+};
 
 @Component({
  selector: 'resolve-root',
@@ -20,11 +26,20 @@ type Density = 'compact' | 'balanced' | 'spacious';
     </select>
    </label>
    <button class="btn" type="button" (click)="toggleTheme()" [attr.aria-pressed]="dark()">Dark appearance</button>
+   @if (session(); as s) {
+    @if (s.authenticated) {
+     <span class="who">{{ s.user.displayName }}</span>
+     <form method="post" action="/api/auth/logout"><button class="btn" type="submit">Sign out</button></form>
+    } @else {
+     <a class="btn btn-primary" href="/api/auth/login?returnTo=/">Sign in</a>
+    }
+   }
   </div>
  </header>
  <main id="main" tabindex="-1">
+  @if (signinMessage(); as m) { <p class="notice" [attr.role]="m.alert ? 'alert' : 'status'">{{ m.text }}</p> }
   <section class="hero">
-   <p class="badge">Phase 0 · Component gate</p>
+   <p class="badge">Phase 1 · Sign-in</p>
    <h1>One place to support<br>every application.</h1>
    <p class="muted">Development workspace for validating Resolve's component and service boundaries. Nothing here connects to an application.</p>
   </section>
@@ -32,6 +47,21 @@ type Density = 'compact' | 'balanced' | 'spacious';
   <section class="panel" aria-labelledby="service-title">
    <h2 id="service-title">Service connection</h2>
    <p role="status">{{ health() }}</p>
+  </section>
+
+  <section class="panel" aria-labelledby="access-title">
+   <h2 id="access-title">Your access</h2>
+   @if (session(); as s) {
+    @if (s.authenticated) {
+     <p>Signed in as {{ s.user.displayName }}{{ s.user.email ? ' (' + s.user.email + ')' : '' }}.
+      Roles: {{ roleLabels() || 'none. Ask an administrator for access.' }}</p>
+     @if (s.capabilities.length) {
+      <ul class="caps">@for (c of s.capabilities; track c) { <li>{{ capabilitySummary(c) }}</li> }</ul>
+     }
+    } @else {
+     <p>You are signed out. Sign in with your organization account to see your access.</p>
+    }
+   } @else { <p>Checking sign-in…</p> }
   </section>
 
   <section class="panel" aria-labelledby="check-title">
@@ -63,6 +93,9 @@ export class ConsoleComponent {
  readonly dark = signal(false);
  readonly density = signal<Density>('balanced');
  readonly health = signal('Checking backend…');
+ readonly session = signal<SessionResponse | undefined>(undefined);
+ readonly roleLabels = computed(() => { const s = this.session(); return s?.authenticated ? s.bundles.map(b => BUNDLE_LABELS[b]).join(', ') : ''; });
+ readonly signinMessage = signal<{ text: string; alert: boolean } | undefined>(SIGNIN_MESSAGES[new URLSearchParams(location.search).get('signin') ?? '']);
  readonly appName = signal('');
  readonly contact = signal('');
  readonly team = signal('');
@@ -78,7 +111,14 @@ export class ConsoleComponent {
   fetch('/api/health')
    .then(async r => { if (!r.ok) throw Error(); healthSchema.parse(await r.json()); this.health.set('Resolve API is reachable · contract v1'); })
    .catch(() => this.health.set('Backend unavailable. Start the API service and reload.'));
+  fetch('/api/session', { credentials: 'same-origin' })
+   .then(async r => this.session.set(sessionResponseSchema.parse(await r.json())))
+   .catch(() => this.session.set({ authenticated: false }));
+  // Drop the one-time sign-in result from the address bar so a reload does not repeat it.
+  if (this.signinMessage()) history.replaceState(null, '', location.pathname);
  }
+
+ capabilitySummary(id: keyof typeof CAPABILITIES) { return CAPABILITIES[id].summary; }
 
  toggleTheme() { this.dark.update(v => !v); document.documentElement.dataset['theme'] = this.dark() ? 'dark' : 'light'; }
  setDensity(value: Density) { this.density.set(value); document.documentElement.dataset['density'] = value; }

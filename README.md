@@ -1,10 +1,10 @@
 # Resolve
 
 Resolve is the internal control tower for the organization's Quackback fleet.
-Status: **phase 0 (integration discovery)**. The repository contains a development foundation used to
-validate the stack (Angular console hosting shadcn React controls as Web Components, Next.js API on
-Node.js, PostgreSQL migration runner). No authentication, tenant access, infrastructure or deployment
-exists yet; see the phase exit criteria in the delivery plan.
+Status: **phase 0 contracts done; phase 1 sign-in started against a mock IdP.** The repository contains
+the stack foundation (Angular console with shadcn controls as Web Components, Next.js API on Node.js,
+PostgreSQL), the v1 contract specification, and OIDC sign-in with sessions, capability checks and audit.
+There is no tenant access, infrastructure or deployment yet; see the phase exit criteria in the delivery plan.
 
 Start with [the delivery plan](plans/00-delivery-plan.md). The active specification is the numbered
 planning documents here; the imported [Quackback v2 plan](plans/reference/20-control-tower-quackback-v2.md)
@@ -12,24 +12,33 @@ is a historical reference, not an implementation-ready specification.
 
 ## Development
 
-Requires Node.js from `.nvmrc` (24.15 or later, below 25) and a disposable PostgreSQL for database work.
+Requires Node.js from `.nvmrc` (24.15 or later, below 25) and Docker for a disposable PostgreSQL.
 
 ```sh
 npm ci
-npm run dev                # API on 127.0.0.1:3100, console on 127.0.0.1:4200 (proxies /api)
-npm run check              # typecheck, console build and unit tests
-npm run test:e2e           # Playwright + axe; PW_CHANNEL=chrome uses installed Chrome
-QUACKBACK_SRC=../quackback npm run test:contract   # tool inventory vs. the pinned fork
+cp .env.example .env       # development-only values, including the mock IdP client
 docker run -d --name resolve-db -e POSTGRES_USER=resolve -e POSTGRES_PASSWORD=resolve \
   -e POSTGRES_DB=resolve -p 127.0.0.1:55432:5432 postgres:18
-DATABASE_URL=postgres://resolve:resolve@127.0.0.1:55432/resolve npm run db:migrate
-DATABASE_URL=postgres://resolve:resolve@127.0.0.1:55432/resolve npm run db:test
+npm run db:migrate
+npm run dev                # mock IdP :3200, API :3100, console :4200 (proxies /api)
 ```
 
-Phase 0 evidence: [component gate](docs/evidence/phase-0-component-gate.md),
-[contracts and tool inventory](docs/evidence/phase-0-contracts.md).
+Open http://127.0.0.1:4200 and choose **Sign in**. The mock IdP (`tools/mock-idp`) lists test users
+whose groups map to bundles through `RESOLVE_GROUP_BUNDLES`: Ada Admin, Sam Agent, Olive Observer,
+Bea Broadcaster, a user with no groups, and "Sam Duplicate", who has the same email as Sam but a different subject.
+The real IdP will be an OIDC/SAML 2.0 provider; Resolve signs in with OIDC (authorization code + PKCE).
 
-`/api/readiness` reports ready only when the API process has `DATABASE_URL` and migrations are applied.
+```sh
+npm run check              # typecheck, console build and unit tests
+npm run db:test            # database tests (DATABASE_URL from .env or the environment)
+npm run test:e2e           # Playwright + axe against npm run dev; PW_CHANNEL=chrome uses installed Chrome
+QUACKBACK_SRC=../quackback npm run test:contract   # tool inventory vs. the pinned fork
+```
+
+Evidence: [component gate](docs/evidence/phase-0-component-gate.md),
+[contracts and tool inventory](docs/evidence/phase-0-contracts.md), [sign-in](docs/evidence/phase-1-sign-in.md).
+
+`/api/readiness` reports ready only when the API has `DATABASE_URL` and the latest migration is applied.
 
 ## Planning documents
 

@@ -10,13 +10,14 @@
     "node": ">=24.15.0 <25"
   },
   "scripts": {
-    "dev": "concurrently -k -n api,console \"npm run dev -w @resolve/api\" \"ng serve console --host 127.0.0.1\"",
+    "dev": "concurrently -k -n idp,api,console \"npm run dev:idp\" \"npm run dev -w @resolve/api\" \"ng serve console --host 127.0.0.1\"",
+    "dev:idp": "node --env-file-if-exists=.env --import tsx tools/mock-idp/server.mts",
     "build": "ng build console && npm run build -w @resolve/api",
     "typecheck": "tsc --noEmit -p tsconfig.check.json && ng build console --configuration development && npm run typecheck -w @resolve/api",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "db:migrate": "tsx packages/database/src/migrate.ts",
-    "db:test": "vitest run --config vitest.database.config.ts",
+    "db:migrate": "node --env-file-if-exists=.env --import tsx packages/database/src/migrate.ts",
+    "db:test": "node --env-file-if-exists=.env node_modules/vitest/vitest.mjs run --config vitest.database.config.ts",
     "test:contract": "vitest run --config vitest.contract.config.ts",
     "check": "npm run typecheck && npm test"
   },
@@ -35,8 +36,10 @@
     "clsx": "2.1.1",
     "cmdk": "1.1.1",
     "drizzle-orm": "0.45.4",
+    "jose": "6.2.12",
     "lucide-react": "1.55.0",
     "next": "16.4.0",
+    "openid-client": "6.8.8",
     "pg": "8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
