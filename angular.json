@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "cli": {
+    "analytics": false
+  },
+  "projects": {
+    "console": {
+      "projectType": "application",
+      "root": "apps/console",
+      "sourceRoot": "apps/console/src",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "apps/console/src/main.ts",
+            "tsConfig": "apps/console/tsconfig.app.json",
+            "index": "apps/console/src/index.html",
+            "styles": [
+              "apps/console/src/styles.css"
+            ],
+            "outputPath": "dist/console"
+          },
+          "configurations": {
+            "production": {
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "options": {
+            "buildTarget": "console:build:development",
+            "proxyConfig": "apps/console/proxy.json"
+          }
+        }
+      }
+    }
+  }
+}
