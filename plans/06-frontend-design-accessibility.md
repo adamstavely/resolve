@@ -27,7 +27,7 @@ reference does not change the already-decided fixed Inter font for Quackback ban
 
 ## Frontend/backend boundary
 
-Proposed layout (not created yet): `apps/api` for Next.js Route Handlers running on Node.js,
+Layout (scaffolded; component gate evidence in `docs/evidence/phase-0-component-gate.md`): `apps/api` for Next.js Route Handlers running on Node.js,
 `apps/console` for Angular, `packages/elements` for shared registered custom elements,
 `packages/contracts` for versioned DTO/schema definitions, and `packages/design-tokens`.
 Angular owns navigation and screen composition. Next.js exposes authenticated JSON APIs and handles OAuth,

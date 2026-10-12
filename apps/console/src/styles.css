@@ -1,12 +1,16 @@
 @import "tailwindcss";
 @import "../../../packages/design-tokens/styles.css";
 @source "../../../packages/elements/src";
-body {margin:0;background:var(--page);color:var(--ink);font-family:system-ui,sans-serif;line-height:1.5;}
-* {box-sizing:border-box;} button,input,[role=combobox] {min-height:44px;} button {cursor:pointer;}
+body {margin:0;background:var(--page);color:var(--ink);font-family:'Geist',system-ui,sans-serif;font-size:var(--fs-base);line-height:1.5;}
+* {box-sizing:border-box;} button,input,select,[role=combobox] {min-height:var(--control-h);} select {font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--control-line);border-radius:7px;padding:0 8px;} button {cursor:pointer;}
 :focus-visible {outline:3px solid var(--accent);outline-offset:3px;}
-resolve-console,resolve-lab {display:block;}
+resolve-console,resolve-text-field,resolve-combobox {display:block;}
 .shell {max-width:1120px;margin:auto;padding:32px;} header {display:flex;justify-content:space-between;align-items:center;gap:20px;border-bottom:1px solid var(--line);padding-bottom:24px;}
 .brand {font-weight:750;font-size:24px;letter-spacing:-1px;} .badge {font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
 h1 {font-size:clamp(28px,5vw,42px);letter-spacing:-1.5px;line-height:1.15;margin:0 0 16px;} h2 {font-weight:650;font-size:20px;} p {max-width:65ch;} .muted {color:var(--muted);}
 .hero {padding:48px 0 32px;} .panel {padding:24px;border:1px solid var(--line);border-radius:12px;background:var(--surface);margin-bottom:24px;} .row {display:flex;gap:12px;align-items:center;flex-wrap:wrap;} .stack {display:grid;gap:16px;}
 .skip {position:fixed;top:-100px;left:12px;padding:12px;background:var(--surface);z-index:100;} .skip:focus {top:12px;} th,td {white-space:normal!important;} @media(max-width:480px){.shell{padding:16px}.panel{padding:16px}header{align-items:flex-start}}
+.btn {display:inline-flex;align-items:center;padding:0 16px;border:1px solid var(--control-line);border-radius:9px;background:var(--surface);color:var(--ink);font:inherit;font-weight:550;}
+.btn:hover {background:var(--inset);} .btn-primary {background:var(--accent);border-color:var(--accent);color:var(--on-accent);} .btn-primary:hover {background:var(--accent);filter:brightness(1.08);}
+label.row {gap:8px;}
+@media (prefers-reduced-motion: reduce) {*,*::before,*::after {transition-duration:0s!important;animation-duration:0s!important;}}
