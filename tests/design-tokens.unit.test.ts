@@ -13,16 +13,19 @@ function luminance(hex: string) {
 }
 const contrast = (a: string, b: string) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
 
-// WCAG 2.2: 1.4.3 text 4.5:1; 1.4.11 control boundaries and focus indicators 3:1.
-const backgrounds = ['page', 'surface', 'inset'];
-const text = ['ink', 'ink-2', 'muted', 'accent', 'destructive', 'safe', 'sensitive'];
-const nonText = ['control-line', 'accent'];
+// WCAG 2.2: 1.4.3 text 4.5:1; 1.4.11 control boundaries, focus indicators and meaningful icons 3:1.
+const surfaces = ['bg', 'surface', 'surface-inset'];
+const text = ['ink', 'ink-2', 'ink-3', 'accent-ink', 'safe-ink', 'sensitive-ink', 'destructive-ink'];
+const nonText = ['control-line', 'ink-faint', 'accent'];
+const tinted = [['ink', 'accent-soft'], ['accent-ink', 'accent-soft'], ['ink-3', 'accent-soft'], ['safe-ink', 'safe-soft'], ['sensitive-ink', 'sensitive-soft'], ['destructive-ink', 'destructive-soft']];
+const labels = [['on-accent', 'accent'], ['on-destructive', 'destructive'], ['on-ink', 'ink']];
 
-describe.each([[':root', 'light'], [':root[data-theme=dark]', 'dark']])('%s tokens', (selector) => {
+describe.each([[':root, :root[data-theme=light]'], [':root[data-theme=dark]']])('%s tokens', selector => {
  const t = theme(selector);
- test.each(text.flatMap(f => backgrounds.map(b => [f, b])))('text %s on %s ≥ 4.5', (f, b) => expect(contrast(t[f], t[b])).toBeGreaterThanOrEqual(4.5));
- test.each(nonText.flatMap(f => backgrounds.map(b => [f, b])))('non-text %s on %s ≥ 3', (f, b) => expect(contrast(t[f], t[b])).toBeGreaterThanOrEqual(3));
- test.each([['on-accent', 'accent'], ['on-destructive', 'destructive']])('label %s on %s ≥ 4.5', (f, b) => expect(contrast(t[f], t[b])).toBeGreaterThanOrEqual(4.5));
+ test.each(text.flatMap(f => surfaces.map(b => [f, b])))('text %s on %s ≥ 4.5', (f, b) => expect(contrast(t[f], t[b])).toBeGreaterThanOrEqual(4.5));
+ test.each(tinted)('text %s on %s ≥ 4.5', (f, b) => expect(contrast(t[f], t[b])).toBeGreaterThanOrEqual(4.5));
+ test.each(labels)('label %s on %s ≥ 4.5', (f, b) => expect(contrast(t[f], t[b])).toBeGreaterThanOrEqual(4.5));
+ test.each(nonText.flatMap(f => surfaces.map(b => [f, b])))('non-text %s on %s ≥ 3', (f, b) => expect(contrast(t[f], t[b])).toBeGreaterThanOrEqual(3));
 });
 
 test('no remote font or resource loads', () => {

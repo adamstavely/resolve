@@ -3,7 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 
 const tags = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 // Theme changes run colour transitions; sample contrast only after they settle.
-const settled = (page: Page) => page.evaluate(() => Promise.all(document.getAnimations().map(a => a.finished)));
+const settled = (page: Page) => page.evaluate(() => Promise.allSettled(document.getAnimations().map(a => a.finished)));
 const axe = async (page: Page) => { await settled(page); return new AxeBuilder({ page }).withTags(tags).analyze(); };
 
 test('backend contract, self-hosted fonts and no external requests', async ({ page }) => {

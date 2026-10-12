@@ -8,7 +8,7 @@ const session = async (page: Page) => (await page.request.get('/api/session')).j
 
 test('agent signs in through the IdP and gets agent capabilities only', async ({ page }) => {
  await page.goto('/');
- await page.getByRole('link', { name: 'Sign in' }).click();
+ await page.getByRole('banner').getByRole('link', { name: 'Sign in' }).click();
  await page.getByLabel('Sam Agent').check();
  await page.getByRole('button', { name: 'Continue' }).click();
  await expect(page.getByText('Signed in as Sam Agent (sam@example.test). Roles: Fleet agent')).toBeVisible();

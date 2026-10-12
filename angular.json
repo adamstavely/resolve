@@ -18,7 +18,14 @@
             "styles": [
               "apps/console/src/styles.css"
             ],
-            "outputPath": "dist/console"
+            "outputPath": "dist/console",
+            "assets": [
+              {
+                "glob": "favicon.svg",
+                "input": "apps/console/src",
+                "output": "/"
+              }
+            ]
           },
           "configurations": {
             "production": {

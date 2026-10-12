@@ -124,7 +124,7 @@ test('directory disable revokes the session and grants; re-enabling restores nei
  }
  await page.context().clearCookies();
  await signInAs(page, 'Bea Broadcaster');
- await expect(page.getByRole('row', { name: /Payroll/ })).toContainText('Access revoked');
+ await expect(page.getByRole('article', { name: 'Payroll' })).toContainText('Access revoked');
  await expect(page.getByRole('link', { name: 'Reconnect to Payroll' })).toBeVisible();
  await page.context().close();
 });
