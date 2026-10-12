@@ -17,6 +17,7 @@
     "test:e2e": "playwright test",
     "db:migrate": "tsx packages/database/src/migrate.ts",
     "db:test": "vitest run --config vitest.database.config.ts",
+    "test:contract": "vitest run --config vitest.contract.config.ts",
     "check": "npm run typecheck && npm test"
   },
   "dependencies": {

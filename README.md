@@ -19,11 +19,15 @@ npm ci
 npm run dev                # API on 127.0.0.1:3100, console on 127.0.0.1:4200 (proxies /api)
 npm run check              # typecheck, console build and unit tests
 npm run test:e2e           # Playwright + axe; PW_CHANNEL=chrome uses installed Chrome
+QUACKBACK_SRC=../quackback npm run test:contract   # tool inventory vs. the pinned fork
 docker run -d --name resolve-db -e POSTGRES_USER=resolve -e POSTGRES_PASSWORD=resolve \
   -e POSTGRES_DB=resolve -p 127.0.0.1:55432:5432 postgres:18
 DATABASE_URL=postgres://resolve:resolve@127.0.0.1:55432/resolve npm run db:migrate
 DATABASE_URL=postgres://resolve:resolve@127.0.0.1:55432/resolve npm run db:test
 ```
+
+Phase 0 evidence: [component gate](docs/evidence/phase-0-component-gate.md),
+[contracts and tool inventory](docs/evidence/phase-0-contracts.md).
 
 `/api/readiness` reports ready only when the API process has `DATABASE_URL` and migrations are applied.
 

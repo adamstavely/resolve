@@ -70,4 +70,4 @@ sampling mid-transition, not from the final colours. `prefers-reduced-motion` re
 4. `@angular/forms` is not installed; add a `ControlValueAccessor` adapter when the first real form (onboarding) needs reactive forms.
 5. shadcn `AlertDialog` (`@radix-ui/react-alert-dialog`) isn't installed; destructive confirmation uses `Dialog` with `role="alertdialog"`. Switch if the manual checks find a difference.
 6. Add the upstream Geist `OFL.txt` and record font approval (`packages/design-tokens/fonts/README.md`).
-7. Production initial bundle: 941 kB raw / 211 kB estimated transfer, with Angular and React together. It was 1.46 MB until the unused JIT `@angular/compiler` import was removed. Set budgets and lazy-load routes once real screens exist.
+7. Production initial bundle: 953 kB raw / 214 kB estimated transfer, with Angular and React together. It was 1.46 MB until the unused JIT `@angular/compiler` import was removed. Set budgets and lazy-load routes once real screens exist.
