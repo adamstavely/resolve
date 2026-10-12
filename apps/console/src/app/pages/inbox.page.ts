@@ -1,7 +1,7 @@
 import { Component, computed, CUSTOM_ELEMENTS_SCHEMA, DestroyRef, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { Location } from '@angular/common';
 import { z } from 'zod';
-import { conversationDetailResponseSchema, fleetConversationsResponseSchema, targetToolResults } from '../../../../../packages/contracts/src/index';
+import { activityResponseSchema, conversationDetailResponseSchema, fleetConversationsResponseSchema, targetToolResults, type ConversationActivity } from '../../../../../packages/contracts/src/index';
 import { MessageSender, postAction } from '../actions';
 import { RESOLVE_ELEMENTS, ResolveConfirmDialog } from '../elements';
 import { IconComponent } from '../icon.component';
@@ -13,6 +13,9 @@ import { ThreadComponent } from './thread.component';
 type Status = 'open' | 'snoozed' | 'closed' | 'all';
 const pageSchema = targetToolResults.list_conversations.extend({ appKey: z.string() });
 const key = (appKey: string, id: string) => `${appKey}/${id}`;
+/** Viewing is refreshed while the thread is open and the page visible; the tenant expires it shortly after. */
+const VIEWING_REFRESH_MS = 20_000;
+const names = (list: string[]) => list.length <= 2 ? list.join(' and ') : `${list.slice(0, -1).join(', ')} and ${list.at(-1)}`;
 const MONITOR_LABELS: Record<MonitorApp['state'], string> = {
  connecting: 'Connecting', live: 'Live', not_connected: 'Not connected', reconnect_required: 'Reconnect required', dormant: 'Idle', unavailable: 'Unavailable', error: 'Retrying',
 };
@@ -108,12 +111,16 @@ const MONITOR_LABELS: Record<MonitorApp['state'], string> = {
      @if (state.can('chat.mark_read') && d.conversation.unread) { <button class="btn btn-sm btn-ghost" type="button" (click)="markRead()" [disabled]="busy()">Mark read for team</button> }
     </div>
     @if (actionMessage()) { <p class="pad-sm small" [attr.role]="actionError() ? 'alert' : 'status'">{{ actionMessage() }}</p> }
-    <div class="pad thread-scroll"><rs-thread [messages]="d.messages" /></div>
+    <p class="pad-sm small presence-line muted" role="status" aria-live="polite">
+     @if (activityText()) { @if (someoneTyping()) { <span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span> }{{ activityText() }} }
+    </p>
+    <div class="pad thread-scroll"><rs-thread [messages]="d.messages" [attachmentBase]="base() + '/attachments/'" /></div>
     @if (state.can('chat.reply') || state.can('chat.note')) {
      <div class="pad composer-wrap">
       @for (k of [key(selected()!.appKey, selected()!.id)]; track k) {
        <rs-composer [fieldId]="'composer-' + selected()!.id" [canReply]="state.can('chat.reply')" [canNote]="state.can('chat.note')"
         [pending]="sender.pending()" [initialDraft]="drafts.get(k) ?? ''" (draftChange)="drafts.set(k, $event)"
+        [uploadPath]="'/api/apps/' + encode(selected()!.appKey) + '/uploads'" [target]="{ type: 'conversation', id: selected()!.id }" (typing)="onTyping($event)"
         (send)="sender.send($event)" (retry)="sender.retry($event)" (check)="sender.check($event)" (discard)="sender.discard($event)" />
       }
      </div>
@@ -157,7 +164,25 @@ export class InboxPage {
  readonly key = key;
  readonly relativeTime = relativeTime;
  readonly fullTime = fullTime;
- private readonly base = () => { const s = this.selected()!; return `/api/apps/${encodeURIComponent(s.appKey)}/conversations/${encodeURIComponent(s.id)}`; };
+ readonly base = () => { const s = this.selected()!; return `/api/apps/${encodeURIComponent(s.appKey)}/conversations/${encodeURIComponent(s.id)}`; };
+ readonly encode = encodeURIComponent;
+ /** Other staff viewing or typing, and the customer's presence, for the open conversation (from the application). */
+ readonly activity = signal<ConversationActivity | undefined>(undefined);
+ readonly someoneTyping = computed(() => { const a = this.activity(); return !!a && (a.visitor.typing || a.agents.some(x => x.activity === 'typing')); });
+ readonly activityText = computed(() => {
+  const a = this.activity(), d = this.detail();
+  if (!a || !d) return '';
+  const customer = d.conversation.visitorName ?? 'The customer';
+  const typing = a.agents.filter(x => x.activity === 'typing').map(x => x.name);
+  const viewing = a.agents.filter(x => x.activity === 'viewing').map(x => x.name);
+  return [
+   a.visitor.typing ? `${customer} is typing…` : a.visitor.online ? `${customer} is online` : '',
+   typing.length ? `${names(typing)} ${typing.length > 1 ? 'are' : 'is'} writing a reply` : '',
+   viewing.length ? `${names(viewing)} ${viewing.length > 1 ? 'are' : 'is'} viewing` : '',
+  ].filter(Boolean).join(' · ');
+ });
+ private signalled?: { appKey: string; id: string };
+ private viewingTimer?: ReturnType<typeof setInterval>;
  readonly sender = new MessageSender(() => this.base() + '/messages', () => this.refreshSelected(), t => this.inbox.announce(t));
 
  readonly loading = computed(() => this.status() === 'open' ? this.inbox.loading() : this.otherLoading());
@@ -177,6 +202,18 @@ export class InboxPage {
   effect(() => {
    const [app, id] = [this.app(), this.id()];
    if (!opened && app && id && this.state.can('chat.read')) { opened = true; untracked(() => this.select(app, id)); }
+  });
+  const offActivity = this.inbox.onActivity((appKey, itemId) => {
+   const s = this.selected();
+   if (s && s.appKey === appKey && s.id === itemId) this.loadActivity();
+  });
+  const onVisibility = () => document.visibilityState === 'visible' ? this.startViewing() : this.stopViewing();
+  const onPageHide = () => this.stopViewing(true);
+  document.addEventListener('visibilitychange', onVisibility);
+  addEventListener('pagehide', onPageHide);
+  inject(DestroyRef).onDestroy(() => {
+   offActivity(); this.stopViewing();
+   document.removeEventListener('visibilitychange', onVisibility); removeEventListener('pagehide', onPageHide);
   });
   const off = this.inbox.onChange((appKey, detail, itemId) => {
    const s = this.selected();
@@ -218,11 +255,43 @@ export class InboxPage {
  }
 
  select(appKey: string, id: string) {
+  this.stopViewing();
   this.selected.set({ appKey, id }); this.detail.set(undefined); this.detailError.set(''); this.actionMessage.set('');
-  this.sender.pending.set([]);
+  this.sender.pending.set([]); this.activity.set(undefined);
   // Keep the address shareable without re-routing (which would rebuild the page).
   this.location.replaceState(`/inbox/${encodeURIComponent(appKey)}/${encodeURIComponent(id)}`);
   this.refreshSelected();
+  this.startViewing();
+  this.loadActivity();
+ }
+
+ // ── Viewing and typing: explicit, short-lived signals sent only while this person has the thread open ──
+
+ private get canSignal() { return this.state.can('chat.reply') || this.state.can('chat.note'); }
+ private signal(target: { appKey: string; id: string }, activity: 'viewing' | 'typing' | 'stopped', keepalive = false) {
+  const path = `/api/apps/${encodeURIComponent(target.appKey)}/conversations/${encodeURIComponent(target.id)}/activity`;
+  // Best effort: a lost signal simply expires at the application.
+  fetch(path, { method: 'POST', credentials: 'same-origin', keepalive, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ activity }) }).catch(() => {});
+ }
+ private startViewing() {
+  const s = this.selected();
+  if (!s || !this.canSignal || document.visibilityState !== 'visible') return;
+  this.signalled = s;
+  this.signal(s, 'viewing');
+  clearInterval(this.viewingTimer);
+  this.viewingTimer = setInterval(() => { if (this.signalled) this.signal(this.signalled, 'viewing'); }, VIEWING_REFRESH_MS);
+ }
+ private stopViewing(keepalive = false) {
+  clearInterval(this.viewingTimer);
+  if (this.signalled) { this.signal(this.signalled, 'stopped', keepalive); this.signalled = undefined; }
+ }
+ onTyping(typing: boolean) {
+  const s = this.selected();
+  if (s && this.signalled) this.signal(s, typing ? 'typing' : 'viewing');
+ }
+ loadActivity() {
+  const s = this.selected(); if (!s) return;
+  api(this.base() + '/activity', activityResponseSchema).then(r => { if (this.selected() === s) this.activity.set(r.activity); }).catch(() => this.activity.set(undefined));
  }
 
  refreshSelected() {

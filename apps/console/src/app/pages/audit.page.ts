@@ -35,6 +35,7 @@ const ACTION_LABELS: Record<string, string> = {
        <option value="">All</option><option value="conversation">Conversation actions</option><option value="ticket">Ticket actions</option>
        <option value="read">Reads and views</option><option value="access">Refused requests</option><option value="session">Sign-in</option>
        <option value="grant">App connections</option><option value="user">Access changes</option><option value="app">App administration</option>
+       <option value="presence">Chat availability</option>
       </select>
      </label>
      <label for="audit-outcome">Outcome

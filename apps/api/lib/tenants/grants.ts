@@ -107,8 +107,14 @@ export type TokenOutcome =
  * A usable access token for (user, app), refreshing under a row lock when it is about to expire.
  * The lock spans the refresh call, so concurrent callers wait and then reuse the rotated token.
  */
-export async function accessToken(db: Pick<Pool, 'connect'>, sealer: Sealer, userId: string, appKey: string,
+export async function accessToken(db: Pick<Pool, 'connect' | 'query'>, sealer: Sealer, userId: string, appKey: string,
  refresh: (refreshToken: string) => Promise<RefreshResult>, now = () => new Date()): Promise<TokenOutcome> {
+ // Fast path, no lock: a valid token is read without a transaction, so many concurrent calls for one person
+ // (several live streams, a fan-out) do not queue on the grant row. Only a refresh takes the row lock below.
+ const current = (await db.query(
+  `SELECT state, scopes, access_token_enc, access_expires_at FROM user_tenant_grants WHERE user_id = $1 AND app_key = $2`, [userId, appKey])).rows[0];
+ if (current?.state === 'connected' && current.access_expires_at.getTime() - now().getTime() > 30_000)
+  return { status: 'ok', accessToken: sealer.open(current.access_token_enc, aad.accessToken(userId, appKey)), scopes: current.scopes };
  return transaction(db, async tx => {
   const row = (await tx.query(
    `SELECT state, scopes, access_token_enc, refresh_token_enc, access_expires_at FROM user_tenant_grants

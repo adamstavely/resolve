@@ -31,10 +31,11 @@ type Detail = z.infer<typeof ticketDetailResponseSchema>['detail'];
   <div class="detail-cols">
    <section class="card" aria-labelledby="thread-title">
     <div class="card-head"><h2 class="card-title" id="thread-title">Thread</h2></div>
-    <div class="pad"><rs-thread [messages]="d.messages" /></div>
+    <div class="pad"><rs-thread [messages]="d.messages" [attachmentBase]="base() + '/attachments/'" /></div>
     @if (state.can('ticket.reply') || state.can('ticket.note')) {
      <div class="pad composer-wrap">
       <rs-composer fieldId="ticket-composer" [canReply]="state.can('ticket.reply')" [canNote]="state.can('ticket.note')" [pending]="sender.pending()"
+       [uploadPath]="'/api/apps/' + encode(app()) + '/uploads'" [target]="{ type: 'ticket', id: id() }"
        (send)="sender.send($event)" (retry)="sender.retry($event)" (check)="sender.check($event)" (discard)="sender.discard($event)" />
      </div>
     }
@@ -98,7 +99,8 @@ export class TicketDetailPage {
  readonly announcement = signal('');
  readonly closeDialog = viewChild('closeDialogRef', { read: ResolveConfirmDialog });
  private statusSelect?: HTMLSelectElement;
- private readonly base = () => `/api/apps/${encodeURIComponent(this.app())}/tickets/${encodeURIComponent(this.id())}`;
+ readonly encode = encodeURIComponent;
+ readonly base = () => `/api/apps/${encodeURIComponent(this.app())}/tickets/${encodeURIComponent(this.id())}`;
  readonly sender = new MessageSender(() => this.base() + '/messages', () => this.load(false), t => { this.announcement.set(''); setTimeout(() => this.announcement.set(t), 50); });
  constructor() {
   effect(() => {

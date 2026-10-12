@@ -28,6 +28,20 @@ const TITLES = ['Cannot download payslip', 'Login loop after password reset', 'W
 const CUSTOMERS = ['Jordan Lee', 'Amara Okafor', 'Chen Wei', 'Lucía Romero', 'Noah Fischer', 'Priya Nair', 'Sam Taylor', 'Elif Demir'];
 const STATUS = { open: ['Open', 'in_progress'], pending: ['Waiting on customer', 'awaiting_requester'], closed: ['Resolved', 'resolved'] } as const;
 
+const SEEDED_TYPES: Record<string, string> = { png: 'image/png', pdf: 'application/pdf', csv: 'text/csv' };
+const seededFile = (id: string, name: string, size: number) => ({ id, name, contentType: SEEDED_TYPES[name.split('.').pop()!] ?? 'application/octet-stream', size });
+
+/** Bytes for a seeded attachment: the type's signature, then deterministic filler up to the listed size. */
+export function seededContent(a: { id: string; contentType: string; size: number }): Buffer {
+ const head = a.contentType === 'image/png' ? Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  : a.contentType === 'application/pdf' ? Buffer.from('%PDF-1.4\n') : Buffer.from('employee,period,amount\n');
+ const fill = a.contentType === 'text/csv' ? Buffer.from(`E${a.id.length},2026-09,1000.00\n`) : createHash('sha256').update(a.id).digest();
+ const out = Buffer.alloc(a.size);
+ head.copy(out, 0);
+ for (let i = head.length; i < a.size; i += fill.length) fill.copy(out, i, 0, Math.min(fill.length, a.size - i));
+ return out;
+}
+
 function rng(seed: number) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 2 ** 32; }; }
 
 export function buildTenant(appKey: string, seed: number, counts: { tickets: number; conversations: number }, staff: Staff[], now = Date.now()) {
@@ -37,7 +51,7 @@ export function buildTenant(appKey: string, seed: number, counts: { tickets: num
  const team = () => pick(TEAMS);
  const msg = (id: string, at: string, sender: Message['senderType'], author: string | null, content: string, internal = false): Message => ({
   id, senderType: sender, isInternal: internal, authorName: author, content, createdAt: at,
-  attachments: r() < 0.15 ? [{ id: `file_${id}`, name: pick(['screenshot.png', 'payslip.pdf', 'export.csv']), contentType: 'application/octet-stream', size: 1000 + Math.floor(r() * 90_000) }] : [],
+  attachments: r() < 0.15 ? [seededFile(`file_${id}`, pick(['screenshot.png', 'payslip.pdf', 'export.csv']), 1000 + Math.floor(r() * 90_000))] : [],
  });
 
  const tickets: Ticket[] = Array.from({ length: counts.tickets }, (_, i) => {
@@ -111,7 +125,7 @@ const conversationSummary = (c: Conversation) => ({ id: c.id, status: c.status, 
  visitorPrincipalId: c.visitorPrincipalId, assignedAgentPrincipalId: c.assignedAgentPrincipalId, assigneeName: c.assigneeName, teamName: c.teamName, waitingSince: c.waitingSince,
  visitorName: c.visitorName, unread: isUnread(c), version: c.version });
 
-export class ToolError extends Error { constructor(readonly code: 'NOT_FOUND' | 'FORBIDDEN' | 'INVALID_ARGUMENT' | 'CONFLICT' | 'OPERATION_CONFLICT', message: string) { super(message); } }
+export class ToolError extends Error { constructor(readonly code: 'NOT_FOUND' | 'FORBIDDEN' | 'INVALID_ARGUMENT' | 'CONFLICT' | 'OPERATION_CONFLICT' | 'FILE_NOT_AVAILABLE' | 'FILE_TYPE_NOT_ALLOWED' | 'FILE_TOO_LARGE' | 'FILE_REJECTED', message: string) { super(message); } }
 
 type Args = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === 'string' ? v : undefined);

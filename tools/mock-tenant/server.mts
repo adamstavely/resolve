@@ -33,7 +33,8 @@ const idpKeys = createRemoteJWKSet(new URL(`${idp}/jwks`), { cooldownDuration: 0
 /** Scopes the tenant will grant to Resolve (the fork's vocabulary plus OIDC). */
 const SUPPORTED_SCOPES = ['openid', 'offline_access', 'read:feedback', 'write:feedback', 'write:changelog', 'read:article', 'write:article', 'read:chat', 'write:chat', 'read:settings', 'write:settings'];
 const ACCESS_SECONDS = 300;
-const WRITE_TOOLS = new Set(['reply_to_conversation', 'add_conversation_note', 'assign_conversation', 'set_conversation_status', 'mark_conversation_read', 'reply_to_ticket', 'add_ticket_note', 'assign_ticket', 'set_ticket_status']);
+const WRITE_TOOLS = new Set(['reply_to_conversation', 'add_conversation_note', 'assign_conversation', 'set_conversation_status', 'mark_conversation_read', 'reply_to_ticket', 'add_ticket_note', 'assign_ticket', 'set_ticket_status',
+ 'upload_file', 'signal_activity', 'set_availability']);
 
 function required(name: string) {
  const v = process.env[name];
@@ -49,9 +50,9 @@ function send(res: ServerResponse, status: number, body: unknown) {
  res.end(typeof body === 'string' ? body : JSON.stringify(body));
 }
 const oauthError = (res: ServerResponse, error: string, description: string, status = 400) => send(res, status, { error, error_description: description });
-async function body(req: IncomingMessage) {
+async function body(req: IncomingMessage, limit = 16_384) {
  let raw = '';
- for await (const chunk of req) { raw += chunk; if (raw.length > 16_384) throw new Error('Body too large'); }
+ for await (const chunk of req) { raw += chunk; if (raw.length > limit) throw new Error('Body too large'); }
  return raw;
 }
 
@@ -102,7 +103,8 @@ async function startTenant(t: TenantConfig) {
   let payload;
   try { ({ payload } = await jwtVerify(bearer ?? '', ownKeys, { issuer, audience: `${origin}/api/mcp` })); }
   catch { res.writeHead(401, { 'WWW-Authenticate': 'Bearer error="invalid_token"', 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ error: 'invalid_token' })); }
-  const rpc = JSON.parse(await body(req));
+  // Uploads carry up to 5 MiB as base64.
+  const rpc = JSON.parse(await body(req, 8 * 1024 * 1024));
   stats.toolCalls++;
   const failMode = failFor.get(String(payload.sub));
   if (failMode === 'error') return send(res, 500, { error: 'injected failure' });
@@ -246,10 +248,14 @@ async function startTenant(t: TenantConfig) {
     return send(res, 200, { protocolVersions: [1], tools: {
      list_tickets: 2, get_ticket: 2, list_conversations: 2, get_conversation: 2, get_support_dashboard: 1, list_support_activity: 1,
      reply_to_conversation: 2, add_conversation_note: 1, assign_conversation: 1, set_conversation_status: 2, mark_conversation_read: 1,
-     reply_to_ticket: 2, add_ticket_note: 2, assign_ticket: 1, set_ticket_status: 1, get_operation_result: 1, list_changes: 1 } });
+     reply_to_ticket: 2, add_ticket_note: 2, assign_ticket: 1, set_ticket_status: 1, get_operation_result: 1, list_changes: 1,
+     upload_file: 2, get_attachment: 1, signal_activity: 1, get_conversation_activity: 1, get_availability: 1, set_availability: 1 } });
    }
    if (req.method === 'GET' && url.pathname === '/dev/stats') return send(res, 200, stats);
    if (req.method === 'POST' && url.pathname === '/dev/customer-message') { const b = JSON.parse(await body(req)); return send(res, 200, store.customerMessage(b.conversationId, String(b.text ?? 'Hello'), b.team)); }
+   if (req.method === 'POST' && url.pathname === '/dev/visitor-activity') { const b = JSON.parse(await body(req)); return send(res, 200, store.visitorActivity(String(b.conversationId), b)); }
+   if (req.method === 'GET' && url.pathname === '/dev/activity') return send(res, 200, store.rawActivity(url.searchParams.get('conversationId') ?? ''));
+   if (req.method === 'GET' && url.pathname === '/dev/availability') return send(res, 200, store.availabilityByName());
    if (req.method === 'POST' && url.pathname === '/dev/fail') {
     const { mode, sub } = JSON.parse(await body(req));
     const id = userFor(idp, String(sub), '').id;

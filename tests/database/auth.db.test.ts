@@ -4,7 +4,7 @@ import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { migrate } from '../../packages/database/src';
 import {
- consumeLoginAttempt, createLoginAttempt, createSession, findSession, revokeSession, setUserEnabled, signIn, type SignInClaims,
+ consumeLoginAttempt, createLoginAttempt, createSession, findSession, revokeSession, sessionStillValid, setUserEnabled, signIn, type SignInClaims,
 } from '../../apps/api/lib/auth/repository';
 
 const url = process.env.DATABASE_URL;
@@ -121,6 +121,21 @@ describe('sessions', () => {
   expect(await signIn(db, c)).toEqual({ status: 'disabled', userId: s.userId });
   await setUserEnabled(db, s.userId, true);
   expect(await findSession(db, idHash, 60)).toBeUndefined();
+ });
+ test('the live-stream check is read-only unless touching, and sees every kind of revocation', async () => {
+  const lastSeen = async (h: string) => (await db.query('SELECT last_seen_at FROM sessions WHERE id_hash = $1', [h])).rows[0].last_seen_at.getTime();
+  const s = await start();
+  await db.query(`UPDATE sessions SET last_seen_at = now() - interval '5 minutes' WHERE id_hash = $1`, [s.idHash]);
+  const before = await lastSeen(s.idHash);
+  expect(await sessionStillValid(db, s.idHash, 60, false)).toBe(true);
+  expect(await lastSeen(s.idHash)).toBe(before);
+  expect(await sessionStillValid(db, s.idHash, 60, true)).toBe(true);
+  expect(await lastSeen(s.idHash)).toBeGreaterThan(before);
+
+  const revoked = await start(); await revokeSession(db, revoked.idHash);
+  const idle = await start(); await db.query(`UPDATE sessions SET last_seen_at = now() - interval '61 minutes' WHERE id_hash = $1`, [idle.idHash]);
+  const disabled = await start(); await setUserEnabled(db, disabled.userId, false);
+  for (const x of [revoked, idle, disabled]) for (const touch of [false, true]) expect(await sessionStillValid(db, x.idHash, 60, touch)).toBe(false);
  });
 });
 

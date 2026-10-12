@@ -49,6 +49,8 @@ export const GAPS = {
  'QB-REG-1': 'No Resolve-facing, column-limited registry projection (registry is internal to the fleet)',
  'QB-PROTO-1': 'Tenants do not advertise supported protocol/tool versions',
  'QB-FILE-1': 'No authorized attachment download contract for Resolve',
+ 'QB-FILE-2': 'upload_file is not bound to an uploader and target, has no type policy, scan result, expiry or upload key',
+ 'QB-CHAT-8': 'No OAuth typing/viewing signals or activity read; agent presence is a side effect of the stream connection',
 } as const;
 export type GapId = keyof typeof GAPS;
 
@@ -80,7 +82,7 @@ export const TENANT_TOOLS = {
  get_ticket: { status: 'available', scope: 'read:chat', permissions: ['ticket.view'], objectPolicy: 'assertTicketVisible on ticketId (fork gate)', idempotency: 'read', gaps: [], source: tick },
  reply_to_ticket: { status: 'requires_change', scope: 'write:chat', permissions: ['ticket.reply'], objectPolicy: 'assertTicketVisible on ticketId (fork gate)', idempotency: 'not_idempotent', gaps: ['QB-CHAT-6'], source: tick },
  add_ticket_note: { status: 'requires_change', scope: 'write:chat', permissions: ['ticket.note'], objectPolicy: 'assertTicketVisible on ticketId (fork gate)', idempotency: 'not_idempotent', gaps: ['QB-CHAT-6'], source: tick },
- upload_file: { status: 'available', scope: 'write:chat', permissions: [], objectPolicy: 'Any of conversation/ticket reply or note; 5 MiB decoded', idempotency: 'not_idempotent', gaps: [], source: 'apps/web/src/lib/server/mcp/tools/files.ts' },
+ upload_file: { status: 'requires_change', scope: 'write:chat', permissions: [], objectPolicy: 'Any of conversation/ticket reply or note; 5 MiB decoded; not bound to a target or uploader', idempotency: 'not_idempotent', gaps: ['QB-FILE-2'], source: 'apps/web/src/lib/server/mcp/tools/files.ts' },
 
  // ── Required by first-release workflows, not present in the fork ──
  add_conversation_note: { status: 'missing', scope: 'write:chat', permissions: ['conversation.note'], objectPolicy: 'Same policy as list/detail', idempotency: 'keyed', gaps: ['QB-CHAT-1', 'QB-CHAT-6'] },
@@ -88,7 +90,11 @@ export const TENANT_TOOLS = {
  mark_conversation_read: { status: 'missing', scope: 'write:chat', permissions: ['conversation.view'], objectPolicy: 'Same policy as list/detail; updates the shared support-team watermark (owner decision 2026-10-12)', idempotency: 'idempotent', gaps: ['QB-CHAT-1'] },
  get_operation_result: { status: 'missing', scope: 'read:chat', permissions: [], objectPolicy: 'Only the operation author', idempotency: 'read', gaps: ['QB-CHAT-6'] },
  subscribe_changes: { status: 'missing', scope: 'read:chat', permissions: ['conversation.view'], objectPolicy: 'Per-event authorization; content-free invalidations', idempotency: 'read', gaps: ['QB-CHAT-2', 'QB-CHAT-3'] },
- get_attachment: { status: 'missing', scope: 'read:chat', permissions: ['conversation.view'], objectPolicy: 'Parent message visibility', idempotency: 'read', gaps: ['QB-FILE-1'] },
+ get_attachment: { status: 'missing', scope: 'read:chat', permissions: ['conversation.view'], objectPolicy: 'Named parent conversation/ticket must contain it and be visible; internal-note files for staff only', idempotency: 'read', gaps: ['QB-FILE-1'] },
+ signal_activity: { status: 'missing', scope: 'write:chat', permissions: ['conversation.view'], objectPolicy: 'Same policy as detail; typing only for reply authors, never for notes', idempotency: 'idempotent', gaps: ['QB-CHAT-8'] },
+ get_conversation_activity: { status: 'missing', scope: 'read:chat', permissions: ['conversation.view'], objectPolicy: 'Same policy as detail', idempotency: 'read', gaps: ['QB-CHAT-8'] },
+ get_availability: { status: 'missing', scope: 'read:chat', permissions: [], objectPolicy: 'The caller only', idempotency: 'read', gaps: ['QB-CHAT-3'] },
+ set_availability: { status: 'missing', scope: 'write:chat', permissions: ['conversation.reply'], objectPolicy: 'The caller only; explicit, never implied by a stream connection', idempotency: 'idempotent', gaps: ['QB-CHAT-3'] },
  assign_ticket: { status: 'missing', scope: 'write:chat', permissions: ['ticket.assign'], objectPolicy: 'assertTicketVisible; version-checked', idempotency: 'idempotent', gaps: ['QB-TICKET-2'] },
  set_ticket_status: { status: 'missing', scope: 'write:chat', permissions: ['ticket.set_status'], objectPolicy: 'assertTicketVisible', idempotency: 'idempotent', gaps: ['QB-TICKET-2'] },
  get_support_dashboard: { status: 'missing', scope: 'read:chat', permissions: ['analytics.view', 'conversation.view', 'ticket.view'], objectPolicy: 'Counts use the same predicates as drill-down lists', idempotency: 'read', gaps: ['QB-DASH-1'] },

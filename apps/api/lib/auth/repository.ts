@@ -73,6 +73,19 @@ export interface SessionUser { userId: string; displayName: string; email: strin
  * The signed-in user for a session, or undefined when the session is unknown, revoked, past its absolute
  * or idle limit, or the user is disabled. Checked on every request; extends the idle window.
  */
+/**
+ * Live-stream revocation check: is the session still valid (not revoked, expired or idle, user still enabled)?
+ * Read-only, so it can run before every stream poll; `touch` records activity (at most once a minute) so an
+ * open live inbox keeps the session alive without writing a row on every poll.
+ */
+export async function sessionStillValid(db: Queryable, idHash: string, idleMinutes: number, touch: boolean): Promise<boolean> {
+ const valid = `s.id_hash = $1 AND u.id = s.user_id AND u.enabled AND s.revoked_at IS NULL AND s.expires_at > now() AND s.last_seen_at > now() - make_interval(mins => $2)`;
+ const r = touch
+  ? await db.query(`UPDATE sessions s SET last_seen_at = now() FROM users u WHERE ${valid} RETURNING 1`, [idHash, idleMinutes])
+  : await db.query(`SELECT 1 FROM sessions s JOIN users u ON u.id = s.user_id WHERE ${valid}`, [idHash, idleMinutes]);
+ return (r.rowCount ?? 0) > 0;
+}
+
 export async function findSession(db: Queryable, idHash: string, idleMinutes: number): Promise<SessionUser | undefined> {
  const r = await db.query(
   `UPDATE sessions s SET last_seen_at = now()

@@ -15,6 +15,7 @@ const MESSAGES: Record<string, string> = {
  NOT_CONNECTED: 'Connect to this application first.',
  RECONNECT_REQUIRED: 'Reconnect to this application to continue.',
  NOT_SENT: 'The application could not be reached. Nothing was sent; try again.',
+ FILE_NOT_AVAILABLE: 'An attached file has expired or was not uploaded for this conversation. Attach it again.',
 };
 const UNCERTAIN = 'The application did not confirm this action. It may have been applied. Check the result before trying again.';
 

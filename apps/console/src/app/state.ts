@@ -68,3 +68,4 @@ export function relativeTime(iso: string, now = Date.now()) {
  return new Intl.RelativeTimeFormat('en', { numeric: 'auto' }).format(-n, unit as Intl.RelativeTimeFormatUnit);
 }
 export const fullTime = (iso: string) => new Date(iso).toLocaleString();
+export const fileSize = (n: number) => n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`;

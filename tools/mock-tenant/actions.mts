@@ -5,12 +5,25 @@
  * The tenant enforces its own permissions and object policy, independent of Resolve.
  */
 import { createHash } from 'node:crypto';
-import { canSeeConversation, canSeeTicket, ToolError, type Conversation, type Message, type TenantData, type Ticket, type Viewer } from './fixtures.mjs';
+import { canSeeConversation, canSeeTicket, seededContent, ToolError, type Conversation, type Message, type TenantData, type Ticket, type Viewer } from './fixtures.mjs';
 
-export interface ChangeEvent { seq: number; itemType: 'conversation' | 'ticket'; itemId: string; kind: 'message' | 'assignment' | 'status' | 'read' | 'created'; at: string }
+export interface ChangeEvent { seq: number; itemType: 'conversation' | 'ticket'; itemId: string; kind: 'message' | 'assignment' | 'status' | 'read' | 'created' | 'activity'; at: string }
 interface StoredOp { author: string; payloadHash: string; messageId: string; createdAt: string }
+interface Upload { id: string; key: string; owner: string; targetType: 'conversation' | 'ticket'; targetId: string; name: string; contentType: string; bytes: Buffer; payloadHash: string; expiresAt: number; attached: boolean }
+interface Presence { name: string; viewingUntil: number; typingUntil: number }
 
-const RETAIN = 200;
+const RETAIN = 1000;
+/** The tenant's own attachment policy (it does not trust Resolve's check). */
+const FILE_TYPES: Record<string, string[]> = {
+ 'image/png': ['png'], 'image/jpeg': ['jpg', 'jpeg'], 'image/gif': ['gif'], 'image/webp': ['webp'], 'application/pdf': ['pdf'],
+ 'text/plain': ['txt', 'log'], 'text/csv': ['csv'], 'application/json': ['json'], 'application/zip': ['zip'],
+};
+const MAX_FILE = 5 * 1024 * 1024;
+const UPLOAD_TTL = 60 * 60_000;
+const VIEWING_TTL = 30_000;
+const TYPING_TTL = 8_000;
+/** The standard antivirus test string stands in for the tenant's malware scanner. */
+const EICAR = 'EICAR-STANDARD-ANTIVIRUS-TEST-FILE';
 const STATUS_NAMES = { open: ['Open', 'in_progress'], pending: ['Waiting on customer', 'awaiting_requester'], closed: ['Resolved', 'resolved'] } as const;
 const hash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex');
 
@@ -19,6 +32,12 @@ export class TenantStore {
  private events: ChangeEvent[] = [];
  private ops = new Map<string, StoredOp>();
  private waiters = new Set<() => void>();
+ private uploads = new Map<string, Upload>();
+ private presence = new Map<string, Map<string, Presence>>();
+ private visitors = new Map<string, { online: boolean; typing: boolean }>();
+ private activitySignature = new Map<string, string>();
+ private activityTimers = new Map<string, NodeJS.Timeout>();
+ private availability = new Map<string, { status: 'available' | 'away'; changedAt: string }>();
 
  constructor(readonly appKey: string, readonly data: TenantData, private readonly names: (principalId: string) => string) {}
 
@@ -60,10 +79,117 @@ export class TenantStore {
   return { messageId: m.id, createdAt: m.createdAt, operationKey: key, replayed: false };
  }
 
- private message(v: Viewer, sender: Message['senderType'], content: string, internal: boolean, author?: string): Message {
+ private message(v: Viewer, sender: Message['senderType'], content: string, internal: boolean, author?: string, files: Upload[] = []): Message {
+  for (const f of files) { f.attached = true; f.expiresAt = Infinity; }
   return { id: `msg_${this.appKey}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`, senderType: sender, isInternal: internal,
-   authorName: author ?? this.names(v.principalId), content, createdAt: new Date().toISOString(), attachments: [] };
+   authorName: author ?? this.names(v.principalId), content, createdAt: new Date().toISOString(),
+   attachments: files.map(f => ({ id: f.id, name: f.name, contentType: f.contentType, size: f.bytes.length })) };
  }
+
+ /** Files named in a message: uploaded by this caller, for this target, unexpired and not yet attached. */
+ private filesFor(v: Viewer, targetType: Upload['targetType'], targetId: string, ids: unknown): Upload[] {
+  const list = Array.isArray(ids) ? ids.map(String) : [];
+  if (list.length > 10) throw new ToolError('INVALID_ARGUMENT', 'At most 10 files per message');
+  return list.map(id => {
+   const f = this.uploads.get(id);
+   if (!f || f.owner !== v.principalId || f.targetType !== targetType || f.targetId !== targetId || f.attached || f.expiresAt < Date.now())
+    throw new ToolError('FILE_NOT_AVAILABLE', 'An attached file is missing, expired or belongs elsewhere; upload it again');
+   return f;
+  });
+ }
+
+ private upload(v: Viewer, a: Record<string, unknown>) {
+  const targetType = a.targetType === 'ticket' ? 'ticket' : 'conversation';
+  const target = targetType === 'ticket' ? this.ticket(v, a.targetId) : this.conversation(v, a.targetId);
+  this.actor(v);
+  const key = String(a.uploadKey ?? '');
+  if (!key) throw new ToolError('INVALID_ARGUMENT', 'uploadKey is required');
+  const name = String(a.name ?? '').replace(/[\\/\u0000-\u001f]/g, '_').slice(0, 255);
+  const contentType = String(a.contentType ?? '');
+  const payloadHash = hash({ targetType, target: target.id, name, contentType, content: a.contentBase64 });
+  const prior = [...this.uploads.values()].find(u => u.key === key);
+  if (prior) {
+   if (prior.owner !== v.principalId || prior.payloadHash !== payloadHash) throw new ToolError('OPERATION_CONFLICT', 'This upload key was used for a different file');
+   return this.fileResult(prior);
+  }
+  const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : '';
+  if (!FILE_TYPES[contentType]?.includes(ext)) throw new ToolError('FILE_TYPE_NOT_ALLOWED', 'This type of file cannot be attached');
+  const bytes = Buffer.from(String(a.contentBase64 ?? ''), 'base64');
+  if (!bytes.length) throw new ToolError('INVALID_ARGUMENT', 'The file is empty');
+  if (bytes.length > MAX_FILE) throw new ToolError('FILE_TOO_LARGE', 'Files can be at most 5 MB');
+  if (bytes.includes(EICAR)) throw new ToolError('FILE_REJECTED', 'The file failed the malware scan');
+  const f: Upload = { id: `file_${this.appKey}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`, key, owner: v.principalId, targetType, targetId: target.id,
+   name, contentType, bytes, payloadHash, expiresAt: Date.now() + UPLOAD_TTL, attached: false };
+  this.uploads.set(f.id, f);
+  return this.fileResult(f);
+ }
+ private fileResult(f: Upload) {
+  return { fileId: f.id, name: f.name, contentType: f.contentType, size: f.bytes.length, expiresAt: new Date(Number.isFinite(f.expiresAt) ? f.expiresAt : Date.now() + UPLOAD_TTL).toISOString() };
+ }
+
+ /** Download through the named parent: it must be visible and contain the file. */
+ private attachment(v: Viewer, a: Record<string, unknown>) {
+  const target = a.targetType === 'ticket' ? this.ticket(v, a.targetId) : this.conversation(v, a.targetId);
+  const att = target.messages.flatMap(m => m.attachments).find(x => x.id === a.attachmentId);
+  if (!att) throw new ToolError('NOT_FOUND', 'Attachment not found');
+  const bytes = this.uploads.get(att.id)?.bytes ?? seededContent(att);
+  return { id: att.id, name: att.name, contentType: att.contentType, size: bytes.length, contentBase64: bytes.toString('base64') };
+ }
+
+ // ── Activity: explicit viewing/typing signals with short leases; never implied by a stream connection ──
+
+ private activityOf(conversationId: string, except?: string) {
+  const now = Date.now();
+  const agents = [...(this.presence.get(conversationId) ?? new Map()).entries()]
+   .filter(([id, p]) => id !== except && (p.typingUntil > now || p.viewingUntil > now))
+   .map(([, p]) => ({ name: p.name, activity: p.typingUntil > now ? 'typing' as const : 'viewing' as const }))
+   .sort((x, y) => x.name.localeCompare(y.name));
+  return { visitor: this.visitors.get(conversationId) ?? { online: false, typing: false }, agents, asOf: new Date(now).toISOString() };
+ }
+
+ /** Emit an `activity` change when what others would see changes, and re-check when the next lease expires. */
+ private touchActivity(conversationId: string) {
+  const { visitor, agents } = this.activityOf(conversationId);
+  const sig = JSON.stringify({ visitor, agents });
+  if (this.activitySignature.get(conversationId) !== sig) { this.activitySignature.set(conversationId, sig); this.emit('conversation', conversationId, 'activity'); }
+  clearTimeout(this.activityTimers.get(conversationId));
+  const now = Date.now();
+  const next = Math.min(...[...(this.presence.get(conversationId)?.values() ?? [])].flatMap(p => [p.typingUntil, p.viewingUntil]).filter(t => t > now));
+  if (Number.isFinite(next)) this.activityTimers.set(conversationId, setTimeout(() => this.touchActivity(conversationId), next - now + 5).unref());
+ }
+
+ private signal(v: Viewer, a: Record<string, unknown>) {
+  const c = this.conversation(v, a.conversationId);
+  if (a.activity === 'typing') this.actor(v);
+  const map = this.presence.get(c.id) ?? new Map<string, Presence>();
+  this.presence.set(c.id, map);
+  const now = Date.now();
+  const p = map.get(v.principalId) ?? { name: this.names(v.principalId), viewingUntil: 0, typingUntil: 0 };
+  let expiresAt: number | null = null;
+  if (a.activity === 'stopped') map.delete(v.principalId);
+  else {
+   if (a.activity === 'typing') { p.typingUntil = now + TYPING_TTL; expiresAt = p.typingUntil; } else { p.typingUntil = 0; }
+   p.viewingUntil = Math.max(p.viewingUntil, now + VIEWING_TTL);
+   expiresAt = expiresAt ?? p.viewingUntil;
+   map.set(v.principalId, p);
+  }
+  this.touchActivity(c.id);
+  return { expiresAt: expiresAt === null ? null : new Date(expiresAt).toISOString() };
+ }
+
+ /** Development: what the tenant holds for a conversation (tests check note typing never reaches it). */
+ rawActivity(conversationId: string) { return this.activityOf(conversationId); }
+ /** Development: the customer's widget connects, disconnects or types. */
+ visitorActivity(conversationId: string, state: { online?: boolean; typing?: boolean }) {
+  const prev = this.visitors.get(conversationId) ?? { online: false, typing: false };
+  const next = { online: state.online ?? prev.online, typing: state.typing ?? prev.typing };
+  if (!next.online) next.typing = false;
+  this.visitors.set(conversationId, next);
+  this.touchActivity(conversationId);
+  return next;
+ }
+ /** Development: everyone's explicit availability. */
+ availabilityByName() { return Object.fromEntries([...this.availability.entries()].map(([id, a]) => [this.names(id), a.status])); }
 
  private assignTo(item: { assigneeName: string | null }, v: Viewer, assignee: unknown, set: (id: string | null) => void) {
   const me = assignee === 'me';
@@ -77,8 +203,11 @@ export class TenantStore {
    case 'add_conversation_note': {
     const c = this.conversation(v, a.conversationId); this.actor(v);
     const internal = name === 'add_conversation_note';
-    return this.keyed(v, a.operationKey, { t: name, id: c.id, content: a.content }, () => {
-     const m = this.message(v, 'agent', String(a.content), internal);
+    return this.keyed(v, a.operationKey, { t: name, id: c.id, content: a.content, files: a.fileIds ?? [] }, () => {
+     const m = this.message(v, 'agent', String(a.content ?? ''), internal, undefined, this.filesFor(v, 'conversation', c.id, a.fileIds));
+     // Sending ends this agent's typing indicator.
+     const p = this.presence.get(c.id)?.get(v.principalId);
+     if (p) p.typingUntil = 0;
      c.messages.push(m); c.lastMessageAt = m.createdAt;
      if (!internal) {
       c.waitingSince = null;
@@ -87,6 +216,7 @@ export class TenantStore {
       if (!c.assignedAgentPrincipalId) this.assignTo(c, v, 'me', id => { c.assignedAgentPrincipalId = id; });
      }
      c.version++; this.emit('conversation', c.id, 'message');
+     if (p) this.touchActivity(c.id);
      return m;
     });
    }
@@ -113,8 +243,8 @@ export class TenantStore {
    case 'reply_to_ticket':
    case 'add_ticket_note': {
     const t = this.ticket(v, a.ticketId); this.actor(v);
-    return this.keyed(v, a.operationKey, { t: name, id: t.id, content: a.content }, () => {
-     const m = this.message(v, 'agent', String(a.content), name === 'add_ticket_note');
+    return this.keyed(v, a.operationKey, { t: name, id: t.id, content: a.content, files: a.fileIds ?? [] }, () => {
+     const m = this.message(v, 'agent', String(a.content ?? ''), name === 'add_ticket_note', undefined, this.filesFor(v, 'ticket', t.id, a.fileIds));
      t.messages.push(m); t.updatedAt = m.createdAt; t.version++;
      this.emit('ticket', t.id, 'message');
      return m;
@@ -132,6 +262,21 @@ export class TenantStore {
     t.statusCategory = cat; t.status = STATUS_NAMES[cat][0]; t.stage = STATUS_NAMES[cat][1];
     t.updatedAt = new Date().toISOString(); t.version++; this.emit('ticket', t.id, 'status');
     return { id: t.id, version: t.version, status: t.status, assigneeName: t.assigneeName };
+   }
+   case 'upload_file': return this.upload(v, a);
+   case 'get_attachment': return this.attachment(v, a);
+   case 'signal_activity': return this.signal(v, a);
+   case 'get_conversation_activity': return this.activityOf(this.conversation(v, a.conversationId).id, v.principalId);
+   case 'get_availability': {
+    const cur = this.availability.get(v.principalId);
+    return { status: cur?.status ?? 'away', changedAt: cur?.changedAt ?? null };
+   }
+   case 'set_availability': {
+    this.actor(v);
+    const status = a.status === 'available' ? 'available' : 'away';
+    const cur = this.availability.get(v.principalId);
+    if (cur?.status !== status) this.availability.set(v.principalId, { status, changedAt: new Date().toISOString() });
+    return { status, changedAt: this.availability.get(v.principalId)!.changedAt };
    }
    case 'get_operation_result': {
     const op = this.ops.get(String(a.operationKey));

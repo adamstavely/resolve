@@ -1,9 +1,15 @@
-import { Component, DestroyRef, effect, inject, signal } from '@angular/core';
+import { Component, computed, DestroyRef, effect, inject, signal, untracked } from '@angular/core';
+import { availabilityResponseSchema } from '../../../../packages/contracts/src/index';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
 import { IconComponent, MarkComponent } from './icon.component';
 import { InboxService } from './inbox.service';
-import { AppState } from './state';
+import { api, AppState } from './state';
+
+type AppAvailability = ReturnType<typeof availabilityResponseSchema.parse>['apps'][number];
+const PROBLEM_TEXT: Record<NonNullable<AppAvailability['problem']>, string> = {
+ not_connected: 'not connected', reconnect_required: 'reconnect required', unsupported: 'not supported yet', unavailable: 'unavailable', dormant: 'idle', failed: 'did not respond',
+};
 
 /** Saved preference, else the operating system's. */
 function initialTheme(): 'light' | 'dark' {
@@ -27,6 +33,15 @@ function initialTheme(): 'light' | 'dark' {
   </a>
   <div class="topbar-spacer"></div>
   <div class="topbar-actions">
+   @if (state.can('chat.availability') && availability(); as list) {
+    <!-- Explicit availability for chat routing; having Resolve open never makes you available. -->
+    <button class="btn btn-sm availability" type="button" [attr.aria-pressed]="pressed()" [disabled]="availabilityBusy() || !reachable().length"
+     (click)="toggleAvailability()" [attr.title]="availabilityDetail()" [attr.aria-describedby]="'availability-detail'">
+     <span class="status-dot" [attr.data-tone]="pressed() === 'true' ? 'safe' : pressed() === 'mixed' ? 'sensitive' : 'neutral'" aria-hidden="true"></span>
+     Available for chats@if (pressed() === 'mixed') { <span class="muted small">({{ availableCount() }} of {{ reachable().length }})</span> }
+    </button>
+    <span class="sr-only" id="availability-detail">{{ availabilityDetail() }}</span>
+   }
    <button class="icon-btn" type="button" (click)="toggleTheme()" [attr.aria-pressed]="dark()" aria-label="Dark appearance">
     <rs-icon [name]="dark() ? 'sun' : 'moon'" [size]="18" />
    </button>
@@ -102,6 +117,7 @@ export class ShellComponent {
   // Agents get live inbox updates (and the unread count) on every page while signed in.
   this.inbox.appName = k => this.state.appName(k);
   effect(() => { if (this.state.can('chat.read')) this.inbox.start(); });
+  effect(() => { if (this.state.can('chat.availability')) untracked(() => this.loadAvailability()); });
   // A custom element has no bootstrap component, so start routing explicitly.
   this.router.initialNavigation();
   // After in-app navigation, move focus to the new page's heading so screen readers announce it (2.4.3).
@@ -112,6 +128,41 @@ export class ShellComponent {
    queueMicrotask(() => setTimeout(() => (document.querySelector<HTMLElement>('main h1') ?? document.getElementById('main'))?.focus()));
   });
   inject(DestroyRef).onDestroy(() => sub.unsubscribe());
+ }
+
+ readonly availability = signal<AppAvailability[] | null>(null);
+ readonly availabilityBusy = signal(false);
+ /** Apps where availability can be known and changed. */
+ readonly reachable = computed(() => (this.availability() ?? []).filter(a => a.status !== 'unknown'));
+ readonly availableCount = computed(() => this.reachable().filter(a => a.status === 'available').length);
+ readonly pressed = computed(() => { const n = this.availableCount(); return n === 0 ? 'false' : n === this.reachable().length ? 'true' : 'mixed'; });
+ readonly availabilityDetail = computed(() => this.describe(this.availability() ?? []));
+
+ private describe(list: AppAvailability[]) {
+  const available = list.filter(a => a.status === 'available').map(a => this.state.appName(a.appKey));
+  const away = list.filter(a => a.status === 'away').map(a => this.state.appName(a.appKey));
+  const other = list.filter(a => a.problem && a.problem !== 'dormant' && a.problem !== 'unavailable').map(a => `${this.state.appName(a.appKey)} (${PROBLEM_TEXT[a.problem!]})`);
+  return [available.length ? `Available in ${available.join(', ')}.` : 'Not available for chats in any application.',
+   away.length && available.length ? `Away in ${away.join(', ')}.` : '', other.length ? `Unknown in ${other.join(', ')}.` : ''].filter(Boolean).join(' ');
+ }
+
+ loadAvailability() {
+  api('/api/availability', availabilityResponseSchema).then(r => this.availability.set(r.apps)).catch(() => this.availability.set(null));
+ }
+
+ /** Set available everywhere (from away or partly available) or away everywhere; each app reports its own result. */
+ async toggleAvailability() {
+  const status = this.pressed() === 'true' ? 'away' : 'available';
+  this.availabilityBusy.set(true);
+  try {
+   const r = await fetch('/api/availability', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
+   const parsed = availabilityResponseSchema.safeParse(await r.json().catch(() => null));
+   if (!parsed.success) throw new Error();
+   this.availability.set(parsed.data.apps);
+   this.inbox.announce(this.describe(parsed.data.apps));
+  } catch {
+   this.inbox.announce('Your availability was not changed. Try again.');
+  } finally { this.availabilityBusy.set(false); }
  }
 
  tone(a: { servable: boolean; dormant: boolean; connection: { state: string } }) {

@@ -38,11 +38,13 @@ Commands:
 | list_tickets | needs change | read:chat | ticket.view | QB-TICKET-1 |
 | get_ticket | **available** | read:chat | ticket.view (+ assertTicketVisible) | — |
 | reply_to_ticket / add_ticket_note | needs change | write:chat | ticket.reply / ticket.note | QB-CHAT-6 |
-| upload_file | **available** | write:chat | any reply/note key | — |
+| upload_file | needs change | write:chat | any reply/note key | QB-FILE-2 |
 | add_conversation_note, assign_conversation, mark_conversation_read | missing | write:chat | conversation.note / assign / view | QB-CHAT-1 (+6) |
 | get_operation_result | missing | read:chat | author only | QB-CHAT-6 |
 | subscribe_changes | missing | read:chat | per event | QB-CHAT-2, 3 |
-| get_attachment | missing | read:chat | parent visibility | QB-FILE-1 |
+| get_attachment | missing | read:chat | named parent's visibility | QB-FILE-1 |
+| signal_activity, get_conversation_activity | missing | write:chat / read:chat | conversation.view (typing: reply authors) | QB-CHAT-8 |
+| get_availability, set_availability | missing | read:chat / write:chat | caller only | QB-CHAT-3 |
 | assign_ticket, set_ticket_status | missing | write:chat | ticket.assign / set_status | QB-TICKET-2 |
 | get_support_dashboard, list_support_activity | missing | read:chat | analytics.view (dashboard) + conversation.view + ticket.view | QB-DASH-1, 2 |
 | list/upsert/archive_announcement | missing | *proposed* read/write:announcement | announcement.view / manage | QB-ANN-1, 2 |
@@ -63,6 +65,10 @@ Every dashboard, inbox and broadcast capability needs Quackback fork work first.
 - **Ticket direct-ID access is enforced.** The fork's R-5 gate (`fork/rbac/mcp-tool-permissions.ts`) applies
   `assertTicketVisible` to `get_ticket`, `reply_to_ticket` and `add_ticket_note`, even though `getTicket` itself takes no actor.
   Conversation direct-ID access remains upstream's (`// by-ID access stays upstream's, O-R7`), which is QB-CHAT-4.
+- **QB-FILE-2 (found in phase 3).** `upload_file` takes any base64 file from any caller with a reply or note key.
+  It doesn't bind the upload to its uploader or target, check type, report a scan result, expire unattached files, or take a key for safe retry.
+- **QB-CHAT-8 (found in phase 3).** No OAuth tool signals or reads typing and viewing. In the fork, an agent's presence is a
+  side effect of the inbox SSE connection (QB-CHAT-3), so Resolve can't show it, or keep it accurate, without new tools.
 - **QB-REG-1 / QB-PROTO-1.** The registry (`lib/server/workspaces/registry.ts`) is read only by fleet-internal code.
   No Resolve-facing projection or protocol/tool-version advertisement exists.
 

@@ -37,6 +37,7 @@ export class InboxService {
  private include = new Set<string>();
  private source?: EventSource;
  private listeners = new Set<(appKey: string, detail: ConversationDetail | null, itemId: string) => void>();
+ private activityListeners = new Set<(appKey: string, itemId: string) => void>();
  private started = false;
  appName: (appKey: string) => string = k => k;
 
@@ -53,6 +54,12 @@ export class InboxService {
  onChange(listener: (appKey: string, detail: ConversationDetail | null, itemId: string) => void) {
   this.listeners.add(listener);
   return () => this.listeners.delete(listener);
+ }
+
+ /** Notified when someone starts or stops viewing or typing in a conversation (re-read it only if it is open). */
+ onActivity(listener: (appKey: string, itemId: string) => void) {
+  this.activityListeners.add(listener);
+  return () => this.activityListeners.delete(listener);
  }
 
  load(appKey?: string) {
@@ -108,6 +115,7 @@ export class InboxService {
   if (ev.type === 'monitor') { this.monitor.set(ev.apps); return; }
   if (ev.type === 'resync') { this.load(ev.appKey); return; }
   if (ev.itemType !== 'conversation') return;
+  if (ev.kind === 'activity') { for (const l of this.activityListeners) l(ev.appKey, ev.itemId); return; }
   api(`/api/apps/${encodeURIComponent(ev.appKey)}/conversations/${encodeURIComponent(ev.itemId)}`, conversationDetailResponseSchema).then(r => {
    const c = r.detail.conversation;
    const isNew = !this.rows().some(x => x.appKey === ev.appKey && x.id === c.id);

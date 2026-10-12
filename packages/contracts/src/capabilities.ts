@@ -27,11 +27,12 @@ export const CAPABILITIES = {
  'fleet.view': { summary: 'See registered apps, health and own connection state', kind: 'read', confirmation: 'none', tools: [], jobs: [], phase: 1 },
  'connection.manage': { summary: 'Connect and reconnect own per-app grants', kind: 'mutation', confirmation: 'none', tools: [], jobs: [], phase: 1 },
  'dashboard.view': { summary: 'First-pass KPI cards and recent activity', kind: 'read', confirmation: 'none', tools: ['get_support_dashboard', 'list_support_activity'], jobs: [], phase: 2 },
- 'chat.read': { summary: 'Unified chat queue, threads and attachments', kind: 'read', confirmation: 'none', tools: ['list_conversations', 'get_conversation', 'subscribe_changes', 'get_attachment'], jobs: [], phase: 2 },
- 'chat.reply': { summary: 'Reply to customers, with attachments', kind: 'mutation', confirmation: 'none', tools: ['reply_to_conversation', 'upload_file', 'get_operation_result'], jobs: [], phase: 3 },
- 'chat.note': { summary: 'Add internal notes', kind: 'mutation', confirmation: 'none', tools: ['add_conversation_note', 'upload_file', 'get_operation_result'], jobs: [], phase: 3 },
+ 'chat.read': { summary: 'Unified chat queue, threads and attachments', kind: 'read', confirmation: 'none', tools: ['list_conversations', 'get_conversation', 'subscribe_changes', 'get_attachment', 'get_conversation_activity'], jobs: [], phase: 2 },
+ 'chat.reply': { summary: 'Reply to customers, with attachments', kind: 'mutation', confirmation: 'none', tools: ['reply_to_conversation', 'upload_file', 'get_operation_result', 'signal_activity'], jobs: [], phase: 3 },
+ 'chat.note': { summary: 'Add internal notes', kind: 'mutation', confirmation: 'none', tools: ['add_conversation_note', 'upload_file', 'get_operation_result', 'signal_activity'], jobs: [], phase: 3 },
  'chat.assign': { summary: 'Claim or assign conversations', kind: 'mutation', confirmation: 'none', tools: ['assign_conversation'], jobs: [], phase: 3 },
  'chat.status': { summary: 'Close, snooze and reopen conversations', kind: 'mutation', confirmation: 'none', tools: ['set_conversation_status'], jobs: [], phase: 3 },
+ 'chat.availability': { summary: 'Set yourself available or away for chat routing', kind: 'mutation', confirmation: 'none', tools: ['get_availability', 'set_availability'], jobs: [], phase: 3 },
  'chat.mark_read': { summary: 'Mark conversations read (shared team watermark)', kind: 'mutation', confirmation: 'none', tools: ['mark_conversation_read'], jobs: [], phase: 3 },
  'ticket.read': { summary: 'Ticket lists and threads', kind: 'read', confirmation: 'none', tools: ['list_tickets', 'get_ticket'], jobs: [], phase: 2 },
  'ticket.reply': { summary: 'Reply on ticket threads', kind: 'mutation', confirmation: 'none', tools: ['reply_to_ticket', 'upload_file', 'get_operation_result'], jobs: [], phase: 3 },
@@ -57,7 +58,7 @@ export type CapabilityId = keyof typeof CAPABILITIES;
  */
 export const BUNDLES = {
  'fleet-admin': Object.keys(CAPABILITIES) as CapabilityId[],
- 'fleet-agent': ['fleet.view', 'connection.manage', 'dashboard.view', 'chat.read', 'chat.reply', 'chat.note', 'chat.assign', 'chat.status', 'chat.mark_read', 'ticket.read', 'ticket.reply', 'ticket.note', 'ticket.assign', 'ticket.status'],
+ 'fleet-agent': ['fleet.view', 'connection.manage', 'dashboard.view', 'chat.read', 'chat.reply', 'chat.note', 'chat.assign', 'chat.status', 'chat.mark_read', 'chat.availability', 'ticket.read', 'ticket.reply', 'ticket.note', 'ticket.assign', 'ticket.status'],
  'fleet-observer': ['fleet.view', 'connection.manage', 'dashboard.view', 'chat.read', 'ticket.read'],
  'announcement-author': ['fleet.view', 'connection.manage', 'broadcast.publish'],
 } as const satisfies Record<string, readonly CapabilityId[]>;

@@ -27,20 +27,32 @@ export type RpcOutcome<T> =
  | { kind: 'not_sent' }
  | { kind: 'unknown'; detail: 'timeout' | 'server_error' | 'connection_lost' | 'invalid_response' };
 
-export async function rpc<K extends Tool>(app: RegistryApp, userId: string, tool: K, args: ArgsOf<K>, timeoutMs = 4000): Promise<RpcOutcome<ResultOf<K>>> {
+/** `cancel` ends the call early (e.g. the browser closed its live stream), reported as not sent or unknown like any abort. */
+export async function rpc<K extends Tool>(app: RegistryApp, userId: string, tool: K, args: ArgsOf<K>, timeoutMs = 4000, cancel?: AbortSignal): Promise<RpcOutcome<ResultOf<K>>> {
  const parsedArgs = ARGS[tool].parse(args);
  const token = await accessToken(pool(), sealer(), userId, app.appKey, refresher(app));
  if (token.status !== 'ok') return token.status === 'unavailable' ? { kind: 'not_sent' } : { kind: token.status };
+ // An explicit timer (not AbortSignal.timeout) is cleared as soon as the call settles, so a finished long poll does not
+ // keep its request state alive until the timeout would have fired.
+ const abort = new AbortController();
+ const timer = setTimeout(() => abort.abort(new DOMException('Tenant call timed out', 'TimeoutError')), timeoutMs);
+ const onCancel = () => abort.abort(cancel?.reason);
+ cancel?.addEventListener('abort', onCancel, { once: true });
+ try { return await send(app, tool, parsedArgs, token.accessToken, userId, abort.signal); }
+ finally { clearTimeout(timer); cancel?.removeEventListener('abort', onCancel); }
+}
+
+async function send<K extends Tool>(app: RegistryApp, tool: K, parsedArgs: unknown, accessToken: string, userId: string, signal: AbortSignal): Promise<RpcOutcome<ResultOf<K>>> {
  let r: Response;
  try {
   r = await fetch(`${app.supportOrigin}/api/mcp`, {
-   method: 'POST', signal: AbortSignal.timeout(timeoutMs),
-   headers: { Authorization: `Bearer ${token.accessToken}`, 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+   method: 'POST', signal,
+   headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
    body: JSON.stringify({ jsonrpc: '2.0', id: crypto.randomUUID(), method: 'tools/call', params: { name: tool, arguments: parsedArgs } }),
   });
  } catch (e) {
   const err = e as Error & { cause?: { code?: string } };
-  if (err.name === 'TimeoutError') return { kind: 'unknown', detail: 'timeout' };
+  if (err.name === 'TimeoutError' || signal.reason?.name === 'TimeoutError') return { kind: 'unknown', detail: 'timeout' };
   if (['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN'].includes(err.cause?.code ?? '')) return { kind: 'not_sent' };
   return { kind: 'unknown', detail: 'connection_lost' };
  }
@@ -49,7 +61,7 @@ export async function rpc<K extends Tool>(app: RegistryApp, userId: string, tool
  if (r.status === 403) return { kind: 'denied' };
  if (!r.ok) return { kind: 'unknown', detail: 'server_error' };
  let body: { result?: { isError?: boolean; content?: { type: string; text: string }[] } } | null;
- try { body = await r.json(); } catch { return { kind: 'unknown', detail: 'connection_lost' }; }
+ try { body = await r.json(); } catch { return { kind: 'unknown', detail: signal.aborted ? 'timeout' : 'connection_lost' }; }
  const text = body?.result?.content?.find(c => c.type === 'text')?.text ?? '';
  if (!body?.result) return { kind: 'unknown', detail: 'invalid_response' };
  if (body.result.isError) {

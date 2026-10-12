@@ -22,6 +22,8 @@
     "db:migrate": "node --env-file-if-exists=.env --import tsx packages/database/src/migrate.ts",
     "db:test": "node --env-file-if-exists=.env node_modules/vitest/vitest.mjs run --config vitest.database.config.ts",
     "test:contract": "vitest run --config vitest.contract.config.ts",
+    "load:stream": "node --env-file-if-exists=.env --import tsx tools/load/stream-load.mts",
+    "load:harness": "node --env-file-if-exists=.env --import tsx tools/load/stream-harness.mts",
     "check": "npm run typecheck && npm test"
   },
   "dependencies": {

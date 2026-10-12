@@ -1,5 +1,5 @@
 import { signal } from '@angular/core';
-import { operationSchema, type Operation } from '../../../../packages/contracts/src/index';
+import { operationSchema, type Operation, type UploadedFile } from '../../../../packages/contracts/src/index';
 
 /** Result of a Resolve action request: the recorded operation (when one exists) and a user-facing message. */
 export interface ActionResult { ok: boolean; operation?: Operation; message: string; status: number }
@@ -18,7 +18,8 @@ export async function postAction(path: string, body: unknown): Promise<ActionRes
 }
 
 /** A message the user sent from this browser, shown until the tenant confirms it. */
-export interface PendingMessage { operationId: string; kind: 'reply' | 'note'; content: string; state: 'sending' | 'failed' | 'uncertain'; message: string }
+export interface PendingMessage { operationId: string; kind: 'reply' | 'note'; content: string; files: UploadedFile[]; state: 'sending' | 'failed' | 'uncertain'; message: string }
+const body = (p: { kind: 'reply' | 'note'; content: string; operationId: string; files: UploadedFile[] }) => ({ kind: p.kind, content: p.content, operationId: p.operationId, fileIds: p.files.map(f => f.fileId) });
 
 /**
  * Message sending for one thread. Successful sends are confirmed by re-reading the thread from the tenant;
@@ -29,13 +30,13 @@ export class MessageSender {
  readonly pending = signal<PendingMessage[]>([]);
  constructor(private readonly path: () => string, private readonly confirmed: () => void, private readonly announce: (text: string) => void) {}
 
- async send(req: { kind: 'reply' | 'note'; content: string; operationId: string }) {
+ async send(req: { kind: 'reply' | 'note'; content: string; operationId: string; files: UploadedFile[] }) {
   this.upsert({ ...req, state: 'sending', message: '' });
-  this.settle(req.operationId, await postAction(this.path(), req));
+  this.settle(req.operationId, await postAction(this.path(), body(req)));
  }
  async retry(p: PendingMessage) {
   this.upsert({ ...p, state: 'sending', message: '' });
-  this.settle(p.operationId, await postAction(this.path(), { kind: p.kind, content: p.content, operationId: p.operationId }));
+  this.settle(p.operationId, await postAction(this.path(), body(p)));
  }
  async check(p: PendingMessage) {
   this.upsert({ ...p, state: 'sending', message: '' });

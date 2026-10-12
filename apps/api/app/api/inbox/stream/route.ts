@@ -3,7 +3,7 @@ import { isServable, type InboxEvent, type RegistryApp } from '@resolve/contract
 import { config } from '../../../../lib/config';
 import { pool } from '../../../../lib/db';
 import { requireCapability } from '../../../../lib/auth/session';
-import { findSession } from '../../../../lib/auth/repository';
+import { sessionStillValid } from '../../../../lib/auth/repository';
 import { registry } from '../../../../lib/registry';
 import { includeParam } from '../../../../lib/fleet/http';
 import { rpc } from '../../../../lib/tenants/mcp';
@@ -42,13 +42,19 @@ export async function GET(request: NextRequest) {
    let closed = false;
    const close = () => { if (!closed) { closed = true; void writeAudit(pool(), { actorUserId: principal.userId, operation: 'read.inbox_stream_end', outcome: 'succeeded' }).catch(() => {}); abort.abort(); try { controller.close(); } catch { /* already closed */ } } };
    abort.signal.addEventListener('abort', close);
-   const send = (event: InboxEvent) => {
-    if (closed) return;
-    controller.enqueue(enc.encode(`id: ${encode(cursors)}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`));
-   };
+   // A failed write means the client has gone: stop polling its applications straight away.
+   const write = (text: string) => { if (closed) return; try { controller.enqueue(enc.encode(text)); } catch { close(); } };
+   const send = (event: InboxEvent) => write(`id: ${encode(cursors)}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
    const states: Record<string, MonitorState> = {};
+   // Re-checked before every poll (sign-out, blocks and directory disables end the stream); activity is recorded once a minute.
+   let touchedAt = Date.now();
+   const stillValid = () => {
+    const touch = Date.now() - touchedAt > 60_000;
+    if (touch) touchedAt = Date.now();
+    return sessionStillValid(pool(), principal.sessionHash, config().SESSION_IDLE_MINUTES, touch);
+   };
    const publish = () => send({ type: 'monitor', apps: apps.map(a => ({ appKey: a.appKey, state: states[a.appKey] ?? 'unavailable' })) });
-   const heartbeat = setInterval(() => { if (!closed) controller.enqueue(enc.encode(': keep-alive\n\n')); }, 15_000);
+   const heartbeat = setInterval(() => write(': keep-alive\n\n'), 15_000);
    abort.signal.addEventListener('abort', () => clearInterval(heartbeat));
 
    const watch = async (app: RegistryApp) => {
@@ -56,9 +62,9 @@ export async function GET(request: NextRequest) {
     if (app.dormant && !include.has(app.appKey)) { states[app.appKey] = 'dormant'; return; }
     if (!(await actionSupported(app, 'list_changes'))) { states[app.appKey] = 'unavailable'; return; }
     while (!closed) {
-     if (!(await findSession(pool(), principal.sessionHash, config().SESSION_IDLE_MINUTES))) return close();
+     if (!(await stillValid())) return close();
      // Without a cursor, first establish one (no wait), then long-poll from it.
-     const o = await rpc(app, principal.userId, 'list_changes', { after: cursors[app.appKey], waitSeconds: cursors[app.appKey] === undefined ? 0 : 20 }, 25_000);
+     const o = await rpc(app, principal.userId, 'list_changes', { after: cursors[app.appKey], waitSeconds: cursors[app.appKey] === undefined ? 0 : 20 }, 25_000, abort.signal);
      if (closed) return;
      if (o.kind === 'not_connected' || o.kind === 'reconnect_required' || o.kind === 'denied') {
       states[app.appKey] = o.kind === 'denied' ? 'unavailable' : o.kind; publish(); return;
