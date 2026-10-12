@@ -23,7 +23,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
  const go = (status: string, appKey?: string) => new Response(null, { status: 302, headers: {
-  Location: `/?connect=${status}${appKey ? '&app=' + encodeURIComponent(appKey) : ''}`, 'Cache-Control': 'no-store' } });
+  Location: appKey ? `/apps/${encodeURIComponent(appKey)}?connect=${status}` : `/?connect=${status}`, 'Cache-Control': 'no-store' } });
  const principal = await currentPrincipal(request);
  const state = request.nextUrl.searchParams.get('state');
  const attempt = state ? await takeConnectAttempt(pool(), sha256(state)) : undefined;

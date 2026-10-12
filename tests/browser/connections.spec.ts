@@ -41,18 +41,23 @@ async function disconnect(page: Page, ...apps: string[]) {
 test('one human connects two apps through SSO; each tenant knows them under its own account', async ({ browser }) => {
  const page = await signedIn(browser, 'Sam Agent');
  await disconnect(page, 'payroll', 'hr');
+ await page.goto('/apps/payroll');
  await page.getByRole('link', { name: 'Connect to Payroll' }).click();
  await expect(notice(page)).toHaveText('Connected to Payroll.');
+ await page.goto('/apps/hr');
  await page.getByRole('link', { name: 'Connect to HR Platform' }).click();
  await expect(notice(page)).toHaveText('Connected to HR Platform.');
  const [payroll, hr] = [await whoami(page, 'payroll'), await whoami(page, 'hr')];
  expect(payroll.scopes).toEqual(['openid', 'offline_access', 'read:chat', 'write:chat']);
  expect(hr.app).toBe('hr');
  expect(payroll.tenantUserId).not.toBe(hr.tenantUserId);
+ await page.goto('/apps/payroll');
  await page.getByRole('button', { name: 'Check connection to Payroll' }).click();
  await expect(page.getByRole('status').filter({ hasText: 'Payroll recognises you as' })).toContainText(payroll.tenantUserId);
  expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([]);
  // Suspended apps cannot be connected or called.
+ await page.goto('/apps/facilities');
+ await expect(page.getByRole('heading', { name: 'Facilities', level: 1 })).toBeVisible();
  await expect(page.getByRole('link', { name: 'Connect to Facilities' })).toHaveCount(0);
  expect((await page.request.get('/api/apps/facilities/whoami')).status()).toBe(503);
  await page.context().close();
@@ -61,6 +66,7 @@ test('one human connects two apps through SSO; each tenant knows them under its 
 test('an observer is granted read scope only', async ({ browser }) => {
  const page = await signedIn(browser, 'Olive Observer');
  await disconnect(page, 'payroll');
+ await page.goto('/apps/payroll');
  await page.getByRole('link', { name: 'Connect to Payroll' }).click();
  await expect(notice(page)).toHaveText('Connected to Payroll.');
  expect((await whoami(page, 'payroll')).scopes).toEqual(['openid', 'offline_access', 'read:chat']);
@@ -115,6 +121,7 @@ test('directory disable revokes the session and grants; re-enabling restores nei
  };
  const page = await signedIn(browser, 'Bea Broadcaster');
  await disconnect(page, 'payroll');
+ await page.goto('/apps/payroll');
  await page.getByRole('link', { name: 'Connect to Payroll' }).click();
  await expect(notice(page)).toHaveText('Connected to Payroll.');
  try {
@@ -125,7 +132,8 @@ test('directory disable revokes the session and grants; re-enabling restores nei
  }
  await page.context().clearCookies();
  await signInAs(page, 'Bea Broadcaster');
- await expect(page.getByRole('article', { name: 'Payroll' })).toContainText('Access revoked');
+ await page.goto('/apps/payroll');
+ await expect(page.getByRole('region', { name: 'Your connection' })).toContainText('Access revoked');
  await expect(page.getByRole('link', { name: 'Reconnect to Payroll' })).toBeVisible();
  await page.context().close();
 });

@@ -5,7 +5,7 @@
  */
 import { createHash } from 'node:crypto';
 
-export interface Viewer { principalId: string; role: 'admin' | 'agent' | 'observer' | 'portal'; teams: string[]; analytics: boolean }
+export interface Viewer { principalId: string; role: 'admin' | 'agent' | 'observer' | 'portal'; teams: string[]; analytics: boolean; tier?: 1 | 2 | 3 | null }
 export interface Message { id: string; senderType: 'visitor' | 'agent' | 'system'; isInternal: boolean; authorName: string | null; content: string; createdAt: string; attachments: { id: string; name: string; contentType: string; size: number }[] }
 interface Staff { principalId: string; name: string }
 export interface Ticket {
@@ -191,6 +191,8 @@ export function callTool(data: TenantData, v: Viewer, name: string, a: Args, now
    const p = page(entries, e => [e.at, e.id], str(a.cursor), num(a.limit, 20, 50));
    return { entries: p.slice, nextCursor: p.nextCursor, coverageSince: new Date(now - 30 * 24 * 3600_000).toISOString() };
   }
+  // QB-TIER-1 (target): the caller's effective tier; observers and untiered staff have none.
+  case 'get_my_tier': return { tier: v.tier ?? null };
   case 'get_customer_identity': {
    // QB-OBS-1 (target): the customer's verified external id, under the same visibility as detail. Customers 7 and 8
    // were identified without a signed token, so they are unverified and no id is returned.

@@ -17,5 +17,5 @@ export async function POST(request: Request, ctx: { params: Promise<{ appKey: st
  const { appKey } = await ctx.params;
  await setGrantState(pool(), principal.userId, appKey, 'not_connected');
  await audit(pool(), { actorUserId: principal.userId, operation: 'grant.disconnect', outcome: 'succeeded', summary: { app: appKey } });
- return new Response(null, { status: 303, headers: { Location: `/?connect=disconnected&app=${encodeURIComponent(appKey)}`, 'Cache-Control': 'no-store' } });
+ return new Response(null, { status: 303, headers: { Location: `/apps/${encodeURIComponent(appKey)}?connect=disconnected`, 'Cache-Control': 'no-store' } });
 }

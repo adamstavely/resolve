@@ -25,6 +25,8 @@ export const appsResponseSchema = z.strictObject({
  apps: z.array(z.strictObject({
   appKey: z.string(),
   displayName: z.string(),
+  /** One-line description from onboarding; null for applications Resolve did not register. */
+  description: z.string().nullable(),
   state: z.string(),
   servable: z.boolean(),
   dormant: z.boolean(),

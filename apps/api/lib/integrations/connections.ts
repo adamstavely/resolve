@@ -9,6 +9,7 @@ import { transaction, type Queryable } from '../db';
 import { writeAudit } from '../audit';
 import { checkOrigin, ElasticClient, ElasticError, type ClientPolicy } from './elastic/client';
 import { probeFamily, versions } from './elastic/families';
+import { notifyObservability } from './notify';
 
 /*
  * Elastic connections (plan 14, E0). An integration administrator registers private Elasticsearch and Kibana
@@ -105,6 +106,9 @@ export async function setKillSwitch(db: Pick<Pool, 'connect'>, actorUserId: stri
    `UPDATE integration_connections SET kill_switch = $2, kill_switch_reason = $3, revision = revision + 1, version = version + 1, updated_at = now()
     WHERE id = $1 AND version = $4 RETURNING *`, [id, input.killSwitch, input.killSwitch ? input.reason : null, input.version])).rows[0] as Row | undefined;
   if (!r) throw await missingOrConflict(tx, id);
+  // Health for every app on this connection changes at once: tell open screens to re-read.
+  for (const m of (await tx.query('SELECT app_key, environment FROM elastic_app_mappings WHERE connection_id = $1', [id])).rows as { app_key: string; environment: string }[])
+   await notifyObservability(tx, { type: 'health', appKey: m.app_key, environment: m.environment, at: new Date().toISOString() });
   await writeAudit(tx, { actorUserId, operation: 'observability.kill_switch', outcome: 'succeeded', summary: { connectionId: id, killSwitch: input.killSwitch, reason: input.reason } });
   return view(r);
  });

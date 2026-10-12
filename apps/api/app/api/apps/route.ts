@@ -18,6 +18,7 @@ export async function GET(request: Request) {
   throw e;
  }
  const grants = await grantsFor(pool(), principal.userId);
+ const descriptions = new Map(((await pool().query(`SELECT key, description FROM applications WHERE description <> ''`)).rows as { key: string; description: string }[]).map(r => [r.key, r.description]));
  await auditRead(principal, 'apps', { registryRevision: reg.revision });
  return Response.json({
   registryRevision: reg.revision,
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
    const g = grants.get(a.appKey);
    // Probing would wake a dormant app or contact an unavailable one, so those are reported as not checked.
    const health = isServable(a) && !a.dormant ? await tenantHealth(a).then(({ tools: _t, ...h }) => h) : { status: 'not_checked' as const, reasons: [], checkedAt: null };
-   return { appKey: a.appKey, displayName: a.displayName, state: a.state, servable: isServable(a), dormant: a.dormant, health,
+   return { appKey: a.appKey, displayName: a.displayName, description: descriptions.get(a.appKey) ?? null, state: a.state, servable: isServable(a), dormant: a.dormant, health,
     connection: { state: g?.state ?? 'not_connected', scopes: g?.scopes ?? [], tenantUserId: g?.tenantUserId ?? null } };
   })),
  }, { headers: { 'Cache-Control': 'no-store' } });

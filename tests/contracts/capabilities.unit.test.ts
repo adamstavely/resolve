@@ -72,7 +72,7 @@ describe('capability catalogue', () => {
    'chat.assign': ['QB-CHAT-1'],
    'chat.availability': ['QB-CHAT-3'],
    'chat.mark_read': ['QB-CHAT-1'],
-   'ticket.read': ['QB-TICKET-1'],
+   'ticket.read': ['QB-TICKET-1', 'QB-TIER-1'],
    'ticket.reply': ['QB-CHAT-6', 'QB-FILE-2'],
    'ticket.note': ['QB-CHAT-6', 'QB-FILE-2'],
    'ticket.assign': ['QB-TICKET-2'],

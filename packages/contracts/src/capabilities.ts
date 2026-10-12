@@ -34,7 +34,7 @@ export const CAPABILITIES = {
  'chat.status': { summary: 'Close, snooze and reopen conversations', kind: 'mutation', confirmation: 'none', tools: ['set_conversation_status'], jobs: [], phase: 3 },
  'chat.availability': { summary: 'Set yourself available or away for chat routing', kind: 'mutation', confirmation: 'none', tools: ['get_availability', 'set_availability'], jobs: [], phase: 3 },
  'chat.mark_read': { summary: 'Mark conversations read (shared team watermark)', kind: 'mutation', confirmation: 'none', tools: ['mark_conversation_read'], jobs: [], phase: 3 },
- 'ticket.read': { summary: 'Ticket lists and threads', kind: 'read', confirmation: 'none', tools: ['list_tickets', 'get_ticket'], jobs: [], phase: 2 },
+ 'ticket.read': { summary: 'Ticket lists and threads, and your support tier per app', kind: 'read', confirmation: 'none', tools: ['list_tickets', 'get_ticket', 'get_my_tier'], jobs: [], phase: 2 },
  'ticket.reply': { summary: 'Reply on ticket threads', kind: 'mutation', confirmation: 'none', tools: ['reply_to_ticket', 'upload_file', 'get_operation_result'], jobs: [], phase: 3 },
  'ticket.note': { summary: 'Internal ticket notes', kind: 'mutation', confirmation: 'none', tools: ['add_ticket_note', 'upload_file', 'get_operation_result'], jobs: [], phase: 3 },
  'ticket.assign': { summary: 'Assign tickets', kind: 'mutation', confirmation: 'none', tools: ['assign_ticket'], jobs: [], phase: 3 },

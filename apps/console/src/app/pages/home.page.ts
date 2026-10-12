@@ -1,10 +1,14 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { z } from 'zod';
-import { BUNDLE_LABELS, CAPABILITIES, dashboardResponseSchema, whoamiResponseSchema, type CapabilityId, type DashboardResponse, type KpiMetric } from '../../../../../packages/contracts/src/index';
+import { BUNDLE_LABELS, CAPABILITIES, clearanceResponseSchema, dashboardResponseSchema, type CapabilityId, type DashboardResponse, type KpiMetric } from '../../../../../packages/contracts/src/index';
 import { IconComponent, MarkComponent } from '../icon.component';
+import { KnownIssuesComponent } from './service-health.component';
+import { HEALTH_ICON, HEALTH_LABEL, HEALTH_TONE, ObservabilityService, REASON_TEXT } from '../observability.service';
+import type { AppHealth, ElasticFamily } from '../../../../../packages/contracts/src/index';
 import { api, AppState, fullTime, relativeTime } from '../state';
 
+const rank = (s: string) => ({ critical: 3, degraded: 2, healthy: 1 } as Record<string, number>)[s] ?? 0;
 const pilotRunsSchema = z.object({ runs: z.array(z.object({ runId: z.string(), applicationName: z.string(), environment: z.string(), workspaceKey: z.string(), status: z.string(), done: z.boolean() })) });
 const KPIS: { key: KpiMetric; label: string; hint: string }[] = [
  { key: 'openTickets', label: 'Open tickets', hint: 'Visible to you' },
@@ -42,7 +46,7 @@ function connectMessage(result: string | null, app: string) {
 
 @Component({
  selector: 'rs-home-page',
- imports: [IconComponent, MarkComponent, RouterLink],
+ imports: [IconComponent, MarkComponent, RouterLink, KnownIssuesComponent],
  template: `
 <div class="launchpad">
  @if (message(); as m) { <p class="notice" [attr.data-tone]="m.alert ? 'destructive' : 'safe'" [attr.role]="m.alert ? 'alert' : 'status'">{{ m.text }}</p> }
@@ -100,39 +104,57 @@ function connectMessage(result: string | null, app: string) {
   <div class="stack-lg">
    @if (state.apps(); as list) {
     <section aria-labelledby="apps-title">
-     <div class="section-head"><h2 class="section-label" id="apps-title">Your applications</h2></div>
-     <p class="muted small">Connect to each application once. Resolve then acts as you there, with only the access your role needs.</p>
-     <div class="app-grid">
+     <div class="section-head"><h2 class="section-label" id="apps-title">Your applications{{ healthOn() ? ' · live health' : '' }}</h2></div>
+     @if (!healthOn()) { <p class="muted small">Open an application to connect to it. Resolve then acts as you there, with only the access your role needs.</p> }
+     <div class="app-grid" [class.health-grid]="healthOn()">
       @for (a of list.apps; track a.appKey) {
-       <article class="app-card" [id]="'app-' + a.appKey" [attr.aria-labelledby]="'app-name-' + a.appKey" [attr.data-unavailable]="!a.servable || null">
+       <article class="app-card" [class.health-card]="healthOn()" [id]="'app-' + a.appKey" [attr.aria-labelledby]="'app-name-' + a.appKey" [attr.data-unavailable]="!a.servable || null">
         <div class="app-card-top">
          <span class="app-glyph lg" aria-hidden="true">{{ a.displayName.charAt(0) }}</span>
          <div class="grow">
-          <h3 class="app-card-name" [id]="'app-name-' + a.appKey">{{ a.displayName }}</h3>
-          <p class="app-card-key mono">{{ a.appKey }}</p>
+          <h3 class="app-card-name"><a class="card-link" [id]="'app-name-' + a.appKey" [routerLink]="['/apps', a.appKey]">{{ a.displayName }}</a></h3>
+          <p class="app-card-tag">{{ a.description || a.appKey }}</p>
          </div>
-        </div>
-        <dl class="app-card-meta">
-         <div><dt>Status</dt><dd><span class="status-dot" [attr.data-tone]="statusTone(a)" aria-hidden="true"></span>{{ statusLabel(a) }}</dd></div>
-         <div><dt>Your connection</dt><dd>{{ connectionLabel(a.connection.state) }}</dd></div>
-         @if (a.connection.state === 'connected') {
-          <div><dt>Access</dt><dd class="chips">@for (sc of toolScopes(a.connection.scopes); track sc) { <span class="chip mono">{{ sc }}</span> } @empty { <span class="muted">Sign-in only</span> }</dd></div>
+         @if (healthOn()) {
+          @if (healthOf(a.appKey); as h) { <span class="health-status"><span class="status-dot" [attr.data-tone]="healthTone[h.state]" aria-hidden="true"></span>{{ healthLabel[h.state] }}</span> }
          }
-        </dl>
-        @if (a.servable && state.can('connection.manage')) {
-         <div class="app-card-actions">
-          @if (a.connection.state === 'connected') {
-           <button class="btn btn-sm" type="button" (click)="checkConnection(a.appKey, a.displayName)"><rs-icon name="shieldCheck" [size]="15" />Check connection<span class="sr-only"> to {{ a.displayName }}</span></button>
-           <form method="post" [action]="'/api/connect/' + a.appKey + '/disconnect'"><button class="btn btn-sm btn-ghost" type="submit">Disconnect<span class="sr-only"> from {{ a.displayName }}</span></button></form>
-          } @else {
-           <a class="btn btn-sm btn-primary" [href]="'/api/connect/' + a.appKey + '/start'">{{ a.connection.state === 'not_connected' ? 'Connect' : 'Reconnect' }}<span class="sr-only"> to {{ a.displayName }}</span></a>
+        </div>
+        @if (healthOn()) {
+         @if (issueFor(a.appKey); as i) { <div class="hc-issue">{{ i.title }}</div> }
+         <div class="hc-rows">
+          @if (healthOf(a.appKey); as h) {
+           @if (h.reason) { <p class="hc-reason">{{ reasonText(h.reason) }}</p> }
+           @else {
+            <div class="hrow"><span class="k">SLO</span><span class="mono">{{ sloLine(h) }}</span></div>
+            <div class="hrow"><span class="k">Active alerts</span><span class="mono">{{ h.summary.activeAlerts }}</span></div>
+            <div class="hrow"><span class="k">Synthetics</span>
+             @if (h.summary.synthetics.recent.length) {
+              <span class="hrow-v"><span class="ticks" aria-hidden="true">@for (r of h.summary.synthetics.recent; track $index) { <i [attr.data-down]="r.status === 'down' || null"></i> }</span>
+               <span class="mono">{{ passed(h) }}/{{ h.summary.synthetics.recent.length }}</span>
+               <span class="sr-only">: {{ passed(h) }} of the last {{ h.summary.synthetics.recent.length }} runs passed{{ h.summary.synthetics.failing.length ? '; failing now: ' + h.summary.synthetics.failing.join(', ') : '' }}</span></span>
+             } @else { <span class="mono">{{ h.summary.synthetics.configured ? 'No recent results' : 'Not configured' }}</span> }
+            </div>
+           }
           }
          </div>
+         <div class="hc-foot">
+          <span>Your clearance @if (clearanceOf(a.appKey) !== '—') { <b class="mono">{{ clearanceOf(a.appKey) }}</b> } @else { <b class="mono" aria-hidden="true">—</b><span class="sr-only">not reported</span> }</span>
+          @if (openTickets(a.appKey); as n) { <span><b class="mono">{{ n.value }}</b> open tickets</span> }
+          @else if (!a.servable) { <span>Unavailable ({{ a.state }})</span> }
+         </div>
+        } @else {
+         <dl class="app-card-meta">
+          <div><dt>Status</dt><dd><span class="status-dot" [attr.data-tone]="statusTone(a)" aria-hidden="true"></span>{{ statusLabel(a) }}</dd></div>
+          <div><dt>Your connection</dt><dd>{{ connectionLabel(a.connection.state) }}</dd></div>
+         </dl>
         }
        </article>
       }
      </div>
-     <p role="status" class="small muted status-line">{{ connectionCheck() || state.appsError() }}</p>
+     @if (healthOn()) {
+      <p class="hc-source mono">Health from Elastic SLOs, alerting rules and Synthetics@if (refreshedAt(); as t) { · refreshed <time [attr.datetime]="t" [attr.title]="fullTime(t)">{{ relativeTime(t) }}</time>}</p>
+     }
+     <p role="status" class="small muted status-line">{{ state.appsError() }}</p>
     </section>
    } @else if (state.session()?.authenticated === false) {
     <section class="card pad" aria-labelledby="signin-title">
@@ -144,6 +166,7 @@ function connectMessage(result: string | null, app: string) {
   </div>
 
   <aside class="stack-lg" aria-label="Activity and access">
+   @if (state.can('observability.health')) { <rs-known-issues /> }
    @if (state.can('dashboard.view')) {
     <section class="card" aria-labelledby="activity-title">
      <div class="card-head"><h2 class="card-title" id="activity-title"><rs-icon name="activity" [size]="15" />Recent activity</h2><span class="card-meta">Latest per app</span></div>
@@ -184,11 +207,41 @@ function connectMessage(result: string | null, app: string) {
 })
 export class HomePage {
  readonly state = inject(AppState);
+ readonly obs = inject(ObservabilityService);
+ readonly healthLabel = HEALTH_LABEL;
+ readonly healthTone = HEALTH_TONE;
+ readonly healthIcon = HEALTH_ICON;
+ readonly healthOn = computed(() => this.state.can('observability.health'));
+ /** Service health per app (worst environment), from Elastic via Resolve's snapshots (plan 14, E1; prototype board 2). */
+ healthOf(appKey: string) { return this.obs.byApp().get(appKey); }
+ /** The app's current issue in one line: an open case (named by people) before an alert reason. */
+ issueFor(appKey: string) { const list = this.obs.issues().filter(i => i.appKey === appKey); return list.find(i => i.kind === 'case') ?? list[0]; }
+ reasonText(r: string) { return REASON_TEXT[r] ?? r; }
+ missingText(m: ElasticFamily[]) { return m.join(', ') || 'some data'; }
+ passed(h: AppHealth) { return h.summary.synthetics.recent.filter(r => r.status === 'up').length; }
+ sloLine(h: AppHealth) {
+  const s = h.summary.slos;
+  if (!s.total) return 'Not configured';
+  const worst = h.components.filter(c => c.family === 'slo').sort((a, b) => rank(b.state) - rank(a.state))[0];
+  if (!s.degrading && !s.violated) return s.healthy ? 'All within budget' : 'No data';
+  // As the prototype: "Transfers 99.5% · burning 4.2x", with the burn rate only when Elastic reported one.
+  if (s.worstBurn) return `${s.worstBurn.name} ${+(s.worstBurn.target * 100).toFixed(2)}% · burning ${s.worstBurn.value.toFixed(1)}x`;
+  return `${worst?.label ?? 'SLO'} · ${s.violated ? 'violated' : 'degrading'}`;
+ }
+ openTickets(appKey: string) {
+  const r = this.dashboard()?.apps.find(a => a.appKey === appKey);
+  const m = r?.status === 'ok' ? r.data.metrics.openTickets : null;
+  return m && m.status === 'available' ? { value: m.value } : null;
+ }
+ /** Your tier per app as each application reports it (QB-TIER-1); "—" when it reports none or cannot be asked. */
+ readonly clearance = signal<Record<string, 1 | 2 | 3 | null>>({});
+ clearanceOf(appKey: string) { const t = this.clearance()[appKey]; return t ? `T${t}` : '—'; }
+ /** The oldest refresh among apps with current health, so "refreshed" never overstates freshness. */
+ readonly refreshedAt = computed(() => this.obs.health().map(h => h.provenance?.fetchedAt).filter((t): t is string => !!t).sort()[0] ?? null);
  readonly kpis = KPIS;
  readonly dashboard = signal<DashboardResponse | undefined>(undefined);
  readonly loading = signal(false);
  readonly dashError = signal('');
- readonly connectionCheck = signal('');
  readonly include = signal<ReadonlySet<string>>(new Set());
  readonly relativeTime = relativeTime;
  readonly fullTime = fullTime;
@@ -203,6 +256,8 @@ export class HomePage {
   // Load once the session (which may still be in flight) grants the dashboard.
   let started = false;
   effect(() => { if (!started && this.state.can('dashboard.view')) { started = true; untracked(() => this.loadDashboard()); } });
+  let tiers = false;
+  effect(() => { if (!tiers && this.state.can('ticket.read')) { tiers = true; untracked(() => api('/api/clearance', clearanceResponseSchema).then(r => this.clearance.set(Object.fromEntries(r.apps.map(a => [a.appKey, a.tier])))).catch(() => {})); } });
   let pilots = false;
   effect(() => { if (!pilots && this.state.can('connection.manage')) { pilots = true; untracked(() => api('/api/onboarding/pilot-runs', pilotRunsSchema).then(r => this.pilotRuns.set(r.runs)).catch(() => {})); } });
  }
@@ -239,17 +294,6 @@ export class HomePage {
   return !a.servable ? 'sensitive' : a.dormant ? 'neutral' : a.health.status === 'ok' ? 'safe' : 'destructive';
  }
  connectionLabel(state: string) { return CONNECTION_LABELS[state] ?? state; }
- toolScopes(scopes: string[]) { return scopes.filter(s => s !== 'openid' && s !== 'offline_access'); }
  activityLabel(kind: string) { return ACTIVITY_LABELS[kind] ?? kind; }
  capabilitySummary(id: CapabilityId) { return CAPABILITIES[id].summary; }
-
- checkConnection(appKey: string, name: string) {
-  this.connectionCheck.set(`Checking ${name}…`);
-  fetch(`/api/apps/${encodeURIComponent(appKey)}/whoami`, { credentials: 'same-origin' }).then(async r => {
-   const body = await r.json();
-   if (!r.ok) { this.connectionCheck.set(`${name}: ${body.error?.message ?? 'check failed.'}`); if (body.error?.code === 'RECONNECT_REQUIRED') this.state.loadApps(); return; }
-   const who = whoamiResponseSchema.parse(body);
-   this.connectionCheck.set(`${name} recognises you as ${who.tenantUserId} with ${this.toolScopes(who.scopes).join(', ') || 'sign-in only'}.`);
-  }).catch(() => this.connectionCheck.set(`${name}: check failed.`));
- }
 }

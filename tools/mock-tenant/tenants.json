@@ -125,13 +125,23 @@
  "people": {
   "mock|ada": {
    "role": "admin",
-   "teams": []
+   "teams": [],
+   "tiers": {
+    "payroll": 3,
+    "hr": 3,
+    "legal": 3
+   }
   },
   "mock|sam": {
    "role": "agent",
    "teams": [
     "support"
-   ]
+   ],
+   "tiers": {
+    "payroll": 2,
+    "hr": 1,
+    "legal": 1
+   }
   },
   "mock|olive": {
    "role": "observer",
@@ -146,6 +156,9 @@
    ],
    "roles": {
     "hr": "observer"
+   },
+   "tiers": {
+    "payroll": 1
    }
   },
   "mock|sam-imposter": {

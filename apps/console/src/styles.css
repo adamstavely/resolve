@@ -359,3 +359,41 @@ table.data td.small {overflow-wrap:anywhere;}
 .content-preview dt {color:var(--ink-3);}
 .content-preview dd {margin:0; overflow-wrap:anywhere;}
 .notes {margin:0; padding-left:30px; display:grid; gap:6px; font-size:var(--fs-sm);}
+
+/* Service health (plan 14, E1): state is text and icon, never colour alone. */
+.health-mark {display:inline-flex; align-items:center; color:var(--sensitive-ink);}
+.health-mark[data-tone="destructive"] {color:var(--destructive-ink);}
+.tag rs-icon {margin-right:4px; vertical-align:-2px;}
+/* Application cards with live health: prototype board 2. */
+.health-grid {grid-template-columns:repeat(auto-fill,minmax(300px,1fr));}
+.app-card.health-card {padding:16px; gap:12px;}
+.app-card-tag {font-size:12px; color:var(--ink-3); margin:0;}
+.card-link {color:inherit; text-decoration:none;}
+.card-link::after {content:""; position:absolute; inset:0; border-radius:inherit;}
+.card-link:focus-visible {outline:none;}
+.app-card:has(.card-link:focus-visible) {outline:2px solid var(--accent); outline-offset:2px;}
+.health-status {display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:560; color:var(--ink-2); white-space:nowrap;}
+.hc-issue {font-size:12.5px; padding:8px 10px; border-radius:8px; background:var(--sensitive-soft); border:1px solid color-mix(in oklch,var(--sensitive) 35%,transparent); color:var(--sensitive-ink);}
+.hc-rows {border-top:1px solid var(--border); padding-top:8px;}
+.hrow {display:flex; justify-content:space-between; align-items:center; gap:10px; font-size:12.5px; padding:5px 0;}
+.hrow .k {color:var(--ink-2);}
+.hrow .mono {color:var(--ink); text-align:right;}
+.hrow-v {display:flex; align-items:center; gap:8px;}
+.hc-reason {margin:0; padding:5px 0; font-size:12.5px; color:var(--ink-3);}
+.hc-foot {display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; border-top:1px solid var(--border); padding-top:10px; font-size:12px; color:var(--ink-2);}
+.hc-foot b {color:var(--ink);}
+.hc-source {font-size:11px; color:var(--ink-3); margin:10px 0 0;}
+/* Synthetic run strip, oldest to newest. The count beside it and a screen-reader sentence carry the same facts. */
+.ticks {display:flex; gap:3px;}
+.ticks i {display:block; width:6px; height:14px; border-radius:2px; background:var(--safe);}
+.ticks i[data-down] {background:var(--destructive);}
+.run-list {list-style:none; margin:8px 0 0; padding:0; display:grid; gap:6px;}
+.run-list li {display:flex; gap:8px; align-items:center; font-size:var(--fs-sm);}
+.run-list time {margin-left:auto;}
+.health-components {list-style:none; margin:8px 0 0; padding:0; display:grid; gap:8px;}
+.health-components li {display:flex; gap:8px; align-items:flex-start;}
+.issue-title {margin:2px 0; font-weight:560;}
+.link-review {margin-top:10px; display:grid; gap:10px; padding:10px; border:1px solid var(--border); border-radius:var(--r-md);}
+.candidate-list {border:0; margin:0; padding:0; display:grid; gap:6px;}
+.candidate {display:flex; gap:8px; align-items:flex-start; font-size:var(--fs-sm);}
+.candidate input {margin-top:3px; min-width:16px; min-height:16px;}

@@ -39,6 +39,7 @@ export const targetToolArgs = {
  get_conversation: z.strictObject({ conversationId: z.string().min(1).max(200), cursor: z.string().max(500).optional() }),
  get_support_dashboard: z.strictObject({ warningHorizonMinutes: z.number().int().min(5).max(1440).optional() }),
  list_support_activity: z.strictObject({ cursor: z.string().max(500).optional(), limit: z.number().int().min(1).max(50).optional() }),
+ get_my_tier: z.strictObject({}),
 };
 
 const ticketSummary = toolResults.list_tickets.shape.tickets.element.extend({ assigneeName: z.string().nullable(), teamName: z.string().nullable() });
@@ -87,7 +88,14 @@ export const targetToolResults = {
   metrics: z.object(Object.fromEntries(KPI_METRICS.map(m => [m, tenantMetric])) as Record<KpiMetric, typeof tenantMetric>),
  }),
  list_support_activity: z.object({ entries: z.array(activityEntry), nextCursor: z.string().nullable(), coverageSince: ts }),
+ /** QB-TIER-1 (target): the caller's effective support tier in this application; null when they are not on a tier team. */
+ get_my_tier: z.object({ tier: z.union([z.literal(1), z.literal(2), z.literal(3)]).nullable() }),
 };
+/** Optional: a tenant that does not advertise it simply has no clearance to show (not an incompatibility). */
+export const CLEARANCE_TOOL_VERSION = 1; // get_my_tier, QB-TIER-1
+export const clearanceResponseSchema = z.strictObject({
+ apps: z.array(z.strictObject({ appKey: appKeySchema, tier: z.union([z.literal(1), z.literal(2), z.literal(3)]).nullable(), status: z.enum(['ok', 'not_reported', 'unavailable']) })),
+});
 export type TargetTool = keyof typeof targetToolResults;
 export type TicketSummary = z.infer<typeof ticketSummary>;
 export type ThreadMessage = z.infer<typeof threadMessage>;

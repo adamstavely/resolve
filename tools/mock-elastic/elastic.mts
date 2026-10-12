@@ -35,7 +35,22 @@ const esError = (res: ServerResponse, status: number, type: string, reason: stri
 const kbError = (res: ServerResponse, status: number, error: string, message: string) => send(res, status, { statusCode: status, error, message });
 const safeEqual = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
-export async function startMockElastic(opts: { esPort?: number; kibanaPort?: number; keys: MockKey[]; now?: number }): Promise<MockElastic> {
+/** Append a fresh executed result for every monitor/location that has run before (except deliberately idle ones). */
+function tickSynthetics(scenario: Scenario) {
+ const docs = scenario.indices.get('synthetics-browser-default') ?? [];
+ const latest = new Map<string, Doc>();
+ for (const d of docs) {
+  const k = `${d.source['monitor.id']}@${d.source['observer.geo.name']}`;
+  if (!latest.has(k) || String(d.source['@timestamp']) > String(latest.get(k)!.source['@timestamp'])) latest.set(k, d);
+ }
+ const at = new Date().toISOString();
+ for (const [k, d] of latest) {
+  if (d.source['monitor.id'] === 'hr-leave') continue;
+  docs.push({ _id: `tick-${k}-${at}`, _index: d._index, source: { ...d.source, '@timestamp': at } });
+ }
+}
+
+export async function startMockElastic(opts: { esPort?: number; kibanaPort?: number; keys: MockKey[]; now?: number; live?: boolean }): Promise<MockElastic> {
  const state: MockElastic['state'] = { scenario: buildScenario(opts.now), keys: opts.keys.map(k => ({ ...k })), fault: { kind: 'none' }, calls: { es: 0, kibana: 0 } };
  const pits = new Map<string, { docs: Map<string, Doc[]>; expires: number; key: string }>();
 
@@ -190,6 +205,8 @@ export async function startMockElastic(opts: { esPort?: number; kibanaPort?: num
   }
  }
 
+ // Development server: monitors keep running, so "last 15 minutes" stays meaningful however long it runs.
+ const ticker = opts.live ? setInterval(() => tickSynthetics(state.scenario), 60_000) : null;
  const listen = (s: Server, port: number) => new Promise<string>(r => s.listen(port, '127.0.0.1', () => r(`http://127.0.0.1:${(s.address() as AddressInfo).port}`)));
  const esUrl = await listen(es, opts.esPort ?? 0);
  const kibanaUrl = await listen(kibana, opts.kibanaPort ?? 0);
@@ -199,7 +216,7 @@ export async function startMockElastic(opts: { esPort?: number; kibanaPort?: num
    state.scenario = buildScenario(now); state.fault = { kind: 'none' }; state.calls = { es: 0, kibana: 0 }; pits.clear();
    state.keys = opts.keys.map(k => ({ ...k }));
   },
-  close: () => Promise.all([new Promise<void>(r => es.close(() => r())), new Promise<void>(r => kibana.close(() => r()))]).then(() => undefined),
+  close: () => { if (ticker) clearInterval(ticker); return Promise.all([new Promise<void>(r => es.close(() => r())), new Promise<void>(r => kibana.close(() => r()))]).then(() => undefined); },
  };
  return mock;
 }

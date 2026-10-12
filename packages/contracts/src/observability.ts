@@ -199,3 +199,136 @@ export const customerIdentityResult = z.discriminatedUnion('verified', [
  z.object({ verified: z.literal(false), externalId: z.null() }),
 ]);
 export type CustomerIdentity = z.infer<typeof customerIdentityResult>;
+
+// ── E1: app mappings (administration) ──
+
+export const mappingStateSchema = z.enum(['draft', 'active', 'disabled']);
+/** One family's preview result: what this mapping actually finds, so an admin sees gaps before activating. */
+export const previewFamilySchema = z.strictObject({
+ family: z.enum(ELASTIC_FAMILIES),
+ status: z.enum(['ok', 'empty', 'missing', 'denied', 'error', 'not_configured']),
+ found: z.number().int().nonnegative(),
+ /** Configured ids Elastic does not know (SLO ids), or monitors with no executed result in the last 24 hours. */
+ missingIds: z.array(z.string()),
+ code: z.string().nullable(),
+});
+export const mappingPreviewSchema = z.strictObject({
+ checkedAt: isoDateTimeSchema,
+ passed: z.boolean(),
+ families: z.array(previewFamilySchema),
+ /** Events for the known test subject in the last 24 hours (null when none was given). */
+ testSubjectEvents: z.number().int().nonnegative().nullable(),
+});
+export type MappingPreview = z.infer<typeof mappingPreviewSchema>;
+export const isolationResultSchema = z.strictObject({
+ checkedAt: isoDateTimeSchema,
+ passed: z.boolean(),
+ /** Every other mapping on the same connection, and what this mapping's selectors share with it. */
+ comparedWith: z.array(z.strictObject({
+  appKey: appKeySchema, environment: z.string(),
+  overlappingEvents: z.number().int().nonnegative(),
+  sharedIds: z.array(z.string()),
+ })),
+});
+export type IsolationResult = z.infer<typeof isolationResultSchema>;
+
+export const mappingViewSchema = z.strictObject({
+ appKey: appKeySchema,
+ environment: z.string(),
+ mapping: elasticAppMappingSchema,
+ state: mappingStateSchema,
+ revision: z.number().int().positive(),
+ version: z.number().int().nonnegative(),
+ preview: mappingPreviewSchema.nullable(),
+ isolation: isolationResultSchema.nullable(),
+ updatedAt: isoDateTimeSchema,
+});
+export type MappingView = z.infer<typeof mappingViewSchema>;
+export const mappingListSchema = z.strictObject({ mappings: z.array(mappingViewSchema) });
+export const mappingSaveSchema = z.strictObject({ mapping: elasticAppMappingSchema, version: z.number().int().nonnegative().nullable() });
+export const mappingPreviewRequestSchema = z.strictObject({ testSubject: z.string().trim().min(1).max(255).optional() });
+export const mappingStateRequestSchema = z.strictObject({ state: z.enum(['active', 'disabled']), version: z.number().int().nonnegative() });
+
+// ── E1: health and known issues (read models) ──
+
+export const healthComponentSchema = z.strictObject({
+ family: z.enum(['slo', 'alerts', 'synthetics']),
+ /** SLO id, `alerts`, or `monitorId@location`. */
+ key: z.string(),
+ label: z.string(),
+ state: z.enum(HEALTH_STATES),
+ /** Plain-language fact, e.g. "99.61% against 99.5%, budget 22% left, burning 4.2x (1h)". */
+ detail: z.string().max(300),
+});
+export type HealthComponent = z.infer<typeof healthComponentSchema>;
+
+export const HEALTH_REASONS = ['not_configured', 'kill_switch', 'connection_unavailable', 'not_polled_yet'] as const;
+export const appHealthSchema = z.strictObject({
+ appKey: appKeySchema,
+ environment: z.string(),
+ state: z.enum(HEALTH_STATES),
+ /** Why there is no current health (null when there is). */
+ reason: z.enum(HEALTH_REASONS).nullable(),
+ provenance: provenanceSchema.nullable(),
+ components: z.array(healthComponentSchema),
+ summary: z.strictObject({
+  slos: z.strictObject({ total: z.number().int(), healthy: z.number().int(), degrading: z.number().int(), violated: z.number().int(), noData: z.number().int(),
+   /** The highest burn rate an SLO reported, with its SLO, when any did. */
+   worstBurn: z.strictObject({ sloId: z.string(), name: z.string(), target: z.number(), window: z.string(), value: z.number() }).nullable() }),
+  activeAlerts: z.number().int(),
+  synthetics: z.strictObject({
+   /** Latest result per monitor and location. */
+   passing: z.number().int(), total: z.number().int(), failing: z.array(z.string()),
+   /** Monitors the mapping names; with no results in the window the card says so instead of hiding the row. */
+   configured: z.number().int(),
+   /** The most recent executed runs across the mapped monitors, oldest first (the card's run strip). */
+   recent: z.array(z.strictObject({ status: z.enum(['up', 'down']), label: z.string(), checkedAt: isoDateTimeSchema })).max(12),
+  }),
+ }),
+});
+export type AppHealth = z.infer<typeof appHealthSchema>;
+export const fleetHealthSchema = z.strictObject({ apps: z.array(appHealthSchema), pollSeconds: z.number().int().positive() });
+export type FleetHealth = z.infer<typeof fleetHealthSchema>;
+
+export const knownIssueSchema = z.strictObject({
+ id: uuidSchema,
+ appKey: appKeySchema,
+ environment: z.string(),
+ kind: z.enum(['alert', 'case']),
+ providerId: z.string(),
+ title: z.string(),
+ state: z.enum(['active', 'recovered', 'closed']),
+ since: isoDateTimeSchema,
+ lastSeenAt: isoDateTimeSchema,
+ service: z.string().nullable(),
+ /** Distinct instrumented subjects with errors on the mapped services since the issue started. */
+ affected: z.strictObject({ count: z.number().int().nonnegative(), approximate: z.literal(true), since: isoDateTimeSchema, measuredAt: isoDateTimeSchema }).nullable(),
+ linkedTickets: z.number().int().nonnegative(),
+});
+export type KnownIssue = z.infer<typeof knownIssueSchema>;
+export const knownIssueListSchema = z.strictObject({ issues: z.array(knownIssueSchema) });
+
+/** A ticket that might belong to an issue. Never linked without a person confirming it. */
+export const linkCandidateSchema = z.strictObject({
+ ticketId: z.string(),
+ reference: z.string(),
+ title: z.string(),
+ updatedAt: isoDateTimeSchema,
+ matched: z.array(z.string()),
+ missing: z.array(z.string()),
+ /** Pre-selected in the review: only when nothing that is checkable disagrees. */
+ suggested: z.boolean(),
+ linked: z.boolean(),
+});
+export type LinkCandidate = z.infer<typeof linkCandidateSchema>;
+export const linkCandidatesSchema = z.strictObject({ issue: knownIssueSchema, candidates: z.array(linkCandidateSchema), coverage: z.string() });
+export const linkRequestSchema = z.strictObject({ requestId: uuidSchema, ticketIds: z.array(z.string().min(1).max(200)).min(1).max(100) });
+export const linkResultSchema = z.strictObject({ linked: z.array(z.string()), alreadyLinked: z.array(z.string()), refused: z.array(z.strictObject({ ticketId: z.string(), reason: z.string() })) });
+
+/** Content-free invalidation on the observability stream; the browser re-reads with its own authority. */
+export const observabilityEventSchema = z.discriminatedUnion('type', [
+ z.strictObject({ type: z.literal('ready') }),
+ z.strictObject({ type: z.literal('health'), appKey: appKeySchema, environment: z.string(), at: isoDateTimeSchema }),
+ z.strictObject({ type: z.literal('issues'), appKey: appKeySchema, environment: z.string(), at: isoDateTimeSchema }),
+]);
+export type ObservabilityEvent = z.infer<typeof observabilityEventSchema>;

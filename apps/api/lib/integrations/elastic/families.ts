@@ -240,3 +240,43 @@ export async function versions(client: ElasticClient) {
   kibana: { version: v(kb?.version?.number), buildFlavor: v(kb?.version?.build_flavor) },
  };
 }
+
+// ── Counts (E1): affected subjects for a known issue, and event counts for mapping preview and isolation ──
+
+/**
+ * Distinct instrumented subjects with errors on the mapped services since `since`. Elasticsearch's cardinality is
+ * approximate, and only subjects the application instruments are counted; the UI says both.
+ */
+export async function fetchAffectedSubjects(client: ElasticClient, patterns: readonly string[], services: ElasticAppMapping['services'], since: Date, now = new Date()): Promise<number> {
+ if (patterns.length === 0 || services.length === 0) return 0;
+ const r = await client.es<SearchBody>('POST', `/${indexList(patterns)}/_search`, {
+  size: 0, track_total_hits: false,
+  query: { bool: { filter: [serviceFilter(services), range({ from: since, to: now }), { term: { 'processor.event': 'error' } }, { exists: { field: 'user.id' } }] } },
+  aggs: { subjects: { cardinality: { field: 'user.id' } } },
+ });
+ const v = (r.body.aggregations?.subjects as { value?: unknown } | undefined)?.value;
+ return typeof v === 'number' ? v : 0;
+}
+
+/** Number of documents matching every filter in the window (size 0). */
+export async function countEvents(client: ElasticClient, patterns: readonly string[], filters: unknown[], w: Window): Promise<number> {
+ if (patterns.length === 0) return 0;
+ const r = await client.es<{ hits: { total?: { value?: number } } }>('POST', `/${indexList(patterns)}/_search`, {
+  size: 0, track_total_hits: true, query: { bool: { filter: [...filters, range(w)] } },
+ });
+ return r.body.hits.total?.value ?? 0;
+}
+
+/** The most recent executed runs across the mapped monitors (newest first), for the card's run strip. */
+export async function fetchRecentRuns(client: ElasticClient, patterns: readonly string[], monitorIds: readonly string[], w: Window, size = 12): Promise<Parsed<SyntheticResult>> {
+ if (monitorIds.length === 0 || patterns.length === 0) return { items: [], dropped: 0 };
+ const r = await client.es<SearchBody>('POST', `/${indexList(patterns)}/_search`, {
+  size, track_total_hits: false, _source: false, fields: [...SYNTHETIC_FIELDS], sort: [{ '@timestamp': 'desc' }],
+  query: { bool: { filter: [{ terms: { 'monitor.id': [...monitorIds] } }, { exists: { field: 'summary' } }, range(w)] } },
+ });
+ return keep(syntheticResultSchema, r.body.hits.hits.map(h => {
+  const f = h.fields; const us = first<number>(f, 'monitor.duration.us');
+  return { monitorId: safeId(first(f, 'monitor.id')), name: redactText(first<string>(f, 'monitor.name'), 200), location: first(f, 'observer.geo.name'),
+   status: first(f, 'monitor.status'), durationMs: typeof us === 'number' ? Math.round(us / 1000) : null, checkedAt: iso(first(f, '@timestamp')) };
+ }));
+}

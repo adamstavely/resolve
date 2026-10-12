@@ -22,6 +22,10 @@ const ACTION_LABELS: Record<string, string> = {
  'entitlement.desired': 'Entitlement changed', 'entitlement.applied': 'Entitlement applied in the app',
  'observability.connection_create': 'Added an Elastic connection', 'observability.connection_test': 'Tested an Elastic connection',
  'observability.credential_rotate': 'Rotated an Elastic credential', 'observability.kill_switch': 'Changed the Elastic kill switch',
+ 'observability.mapping_save': 'Saved an Elastic mapping', 'observability.mapping_preview': 'Previewed an Elastic mapping', 'observability.mapping_isolation': 'Ran an isolation check',
+ 'observability.mapping_state': 'Activated or disabled an Elastic mapping', 'observability.issue_link': 'Linked tickets to a known issue',
+ 'read.observability_health': 'Viewed service health', 'read.observability_issues': 'Viewed known issues', 'read.observability_stream': 'Started live service health',
+ 'read.issue_candidates': 'Reviewed tickets for a known issue',
 };
 
 @Component({

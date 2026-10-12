@@ -1,6 +1,6 @@
 # Elastic integration — implementation plan
 
-Status: E0 built and tested against the mock, 2026-10-12 ([evidence](../docs/evidence/elastic-e0-contracts-connections.md)); E1 next. This turns [plan 12](12-elastic-observability-integration.md) and the `design/reference/resolve-integrations.html`
+Status: E0 and E1 built and tested against the mock, 2026-10-12 ([E0 evidence](../docs/evidence/elastic-e0-contracts-connections.md), [E1 evidence](../docs/evidence/elastic-e1-health-known-issues.md)); E2 next. This turns [plan 12](12-elastic-observability-integration.md) and the `design/reference/resolve-integrations.html`
 prototype (seven boards) into buildable work for this repository. Scope is the confirmed first release: E0–E2, with
 E5 qualification folded into Phase 6. E3 (pre-flight and verified receipts), E4 (ML patterns, AI summaries) and the
 ServiceNow boards are out of scope.
@@ -110,7 +110,7 @@ apps/api/lib/observability.ts                Read models, authorization, snapsho
 apps/api/app/api/apps/[appKey]/observability/**   Routes from plan 12 §5 (minus preflight/receipt)
 apps/api/app/api/admin/integrations/**        Connections, mappings, preview, isolation check, kill switch
 apps/api/scripts/integration-worker.mts        Durable worker: leased polling per connection/app, checkpoints, backoff, outbox
-packages/database/migrations/0008.sql
+packages/database/migrations/0008.sql, 0009.sql
 tools/mock-elastic/                            Mock ES + Kibana (9.x shapes), scenarios, fault injection, fixture recorder
 apps/console/src/app/pages/…                   Health on home, known issues, context panel, snapshot view, admin pages
 ```

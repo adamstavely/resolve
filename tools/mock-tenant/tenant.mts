@@ -66,7 +66,7 @@ export interface Tenant {
 export interface FleetContext {
  idp: string; resolveRedirect: string;
  /** `announcements`: may manage announcements without a staff role (announcement.manage). */
- people: Record<string, { role: Viewer['role']; teams: string[]; roles?: Record<string, Viewer['role']>; announcements?: boolean }>;
+ people: Record<string, { role: Viewer['role']; teams: string[]; roles?: Record<string, Viewer['role']>; announcements?: boolean; tiers?: Record<string, 1 | 2 | 3> }>;
  names: Record<string, string>;
 }
 
@@ -83,7 +83,7 @@ export const PROTOCOL_TOOLS = {
  reply_to_ticket: 2, add_ticket_note: 2, assign_ticket: 1, set_ticket_status: 1, get_operation_result: 1, list_changes: 1,
  upload_file: 2, get_attachment: 1, signal_activity: 1, get_conversation_activity: 1, get_availability: 1, set_availability: 1,
  list_announcements: 1, upsert_announcement: 1, archive_announcement: 1, get_announcement_by_key: 1,
- get_customer_identity: 1,
+ get_customer_identity: 1, get_my_tier: 1,
 };
 
 const b64url = (b: Buffer) => b.toString('base64url');
@@ -127,7 +127,7 @@ export async function startTenant(t: TenantConfig, ctx: FleetContext, image: str
  };
 
  // Fixture people (unmanaged) keep their configured roles; a provisioned instance starts with nobody.
- const people = t.fixturePeople === false ? [] : Object.entries(ctx.people).map(([sub, p]) => ({ sub, name: ctx.names[sub] ?? sub, role: p.roles?.[t.appKey] ?? p.role, teams: p.teams, announcements: !!p.announcements }));
+ const people = t.fixturePeople === false ? [] : Object.entries(ctx.people).map(([sub, p]) => ({ sub, name: ctx.names[sub] ?? sub, role: p.roles?.[t.appKey] ?? p.role, teams: p.teams, announcements: !!p.announcements, tier: p.tiers?.[t.appKey] ?? null }));
  for (const p of people) userFor(ctx.idp, p.sub, p.name);
  const fixtureStaff = people.filter(p => p.role === 'agent').map(p => ({ principalId: userFor(ctx.idp, p.sub, p.name).principalId, name: p.name }));
  const staff = [...fixtureStaff, { principalId: 'principal_priya', name: 'Priya Shah' }, { principalId: 'principal_tom', name: 'Tom Okafor' }];
@@ -158,7 +158,7 @@ export async function startTenant(t: TenantConfig, ctx: FleetContext, image: str
    }
    const p = u && people.find(x => x.sub === u.idpSub && u.idpIss === ctx.idp);
    if (!p) return { principalId: u?.principalId ?? 'principal_' + tenantUserId.slice(5), role: 'portal', teams: [], analytics: false, denied: false, managed: false, announcer: false };
-   return { principalId: u!.principalId, role: p.role, teams: p.teams, analytics: analytics(p.role), denied: false, managed: false, announcer: p.role === 'admin' || !!p.announcements };
+   return { principalId: u!.principalId, role: p.role, teams: p.teams, analytics: analytics(p.role), denied: false, managed: false, announcer: p.role === 'admin' || !!p.announcements, tier: p.role === 'observer' ? null : p.tier };
   },
   probe(tenantUserId, tool, args) {
    if (!tenantUserId) return { ok: false, code: 'UNAUTHENTICATED' };

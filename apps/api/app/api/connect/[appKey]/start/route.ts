@@ -11,7 +11,7 @@ import { connectRedirectUri, tenantOidc, tenantScopes } from '../../../../../lib
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const back = (status: string, appKey: string) => new Response(null, { status: 302, headers: { Location: `/?connect=${status}&app=${encodeURIComponent(appKey)}`, 'Cache-Control': 'no-store' } });
+const back = (status: string, appKey: string) => new Response(null, { status: 302, headers: { Location: `/apps/${encodeURIComponent(appKey)}?connect=${status}`, 'Cache-Control': 'no-store' } });
 
 /** Start connecting the signed-in human to one app: PKCE + state bound to this session, user and app (contract 2). */
 export async function GET(request: NextRequest, ctx: { params: Promise<{ appKey: string }> }) {

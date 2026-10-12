@@ -30,6 +30,8 @@ const schema = z.object({
  SUPPORT_DOMAINS: z.string().default('support.corp.internal').transform(v => v.split(',').map(d => d.trim().toLowerCase()).filter(Boolean)),
  /** Approved Elastic hosts (plan 12 §4); `*.example.internal` allows subdomains. Empty: no Elastic connection can be saved. */
  ELASTIC_ALLOWED_HOSTS: z.string().default('').transform(v => v.split(',').map(h => h.trim().toLowerCase()).filter(Boolean)),
+ /** Health poll interval per active app mapping (plan 12 §6, proposed 30 s); stale after two missed polls. */
+ OBSERVABILITY_POLL_SECONDS: z.coerce.number().int().min(2).max(3600).default(30),
  RESOLVE_COOKIE_SECURE: z.enum(['true', 'false']).default('true').transform(v => v === 'true'),
  SESSION_ABSOLUTE_MINUTES: z.coerce.number().int().min(5).max(24 * 60).default(12 * 60),
  SESSION_IDLE_MINUTES: z.coerce.number().int().min(5).max(24 * 60).default(60),

@@ -19,6 +19,8 @@ async function signedIn(browser: Browser, name: string, connect: string[] = []) 
   await page.goto(`/api/connect/${app}/start`);
   await expect(page.locator('p.notice')).toContainText('Connected to');
  }
+ // Connecting returns to the application's page; these tests start from Home.
+ if (connect.length) await page.goto('/');
  return page;
 }
 const getJson = async (page: Page, path: string) => (await page.request.get(path)).json();

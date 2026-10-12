@@ -1,7 +1,8 @@
 import { Component, CUSTOM_ELEMENTS_SCHEMA, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import {
- ELASTIC_FAMILIES, FAMILY_LABEL, elasticConnectionListSchema, elasticConnectionSchema, type ElasticConnection, type ElasticFamily,
+ ELASTIC_FAMILIES, FAMILY_LABEL, elasticConnectionListSchema, mappingListSchema, type MappingView, elasticConnectionSchema, type ElasticConnection, type ElasticFamily,
 } from '../../../../../packages/contracts/src/index';
+import { RouterLink } from '@angular/router';
 import { IconComponent } from '../icon.component';
 import { RESOLVE_ELEMENTS, ResolveConfirmDialog } from '../elements';
 import { api, AppState, focusField, fullTime, send } from '../state';
@@ -27,7 +28,7 @@ const emptyDraft = (): Draft => ({ name: '', elasticsearchUrl: '', kibanaUrl: ''
  */
 @Component({
  selector: 'rs-integrations-page',
- imports: [IconComponent, ...RESOLVE_ELEMENTS],
+ imports: [IconComponent, RouterLink, ...RESOLVE_ELEMENTS],
  schemas: [CUSTOM_ELEMENTS_SCHEMA],
  template: `
 <div class="page">
@@ -100,6 +101,25 @@ const emptyDraft = (): Draft => ({ name: '', elasticsearchUrl: '', kibanaUrl: ''
   </table></div>
  </section>
 
+ <section class="card" aria-labelledby="maps-title">
+  <div class="card-head"><h2 class="card-title" id="maps-title">Application mappings</h2></div>
+  <div class="table-wrap pad-sm"><table class="data">
+   <caption class="sr-only">Elastic mappings by application</caption>
+   <thead><tr><th scope="col">Application</th><th scope="col">Mapping</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+   <tbody>
+    @for (a of state.apps()?.apps ?? []; track a.appKey) {
+     <tr>
+      <td>{{ a.displayName }}<div class="muted small mono">{{ a.appKey }}</div></td>
+      <td>@for (m of mappingsFor(a.appKey); track m.environment) {
+        <span class="tag" [attr.data-tone]="m.state === 'active' ? 'safe' : 'neutral'">{{ m.environment }}: {{ m.state === 'active' ? 'active' : m.state === 'draft' ? 'draft' : 'disabled' }}</span>
+       } @empty { <span class="muted small">Not mapped</span> }</td>
+      <td><a class="btn btn-sm" [routerLink]="['/integrations/apps', a.appKey]">{{ mappingsFor(a.appKey).length ? 'Edit' : 'Map' }}<span class="sr-only"> {{ a.displayName }}</span></a></td>
+     </tr>
+    } @empty { <tr><td colspan="3" class="muted">No registered applications.</td></tr> }
+   </tbody>
+  </table></div>
+ </section>
+
  <section class="card" aria-labelledby="add-title">
   <div class="card-head"><h2 class="card-title" id="add-title">Add an Elastic connection</h2></div>
   <form class="pad stack-lg" (submit)="create($event)" novalidate>
@@ -129,6 +149,8 @@ const emptyDraft = (): Draft => ({ name: '', elasticsearchUrl: '', kibanaUrl: ''
 export class IntegrationsPage {
  readonly state = inject(AppState);
  readonly connections = signal<ElasticConnection[]>([]);
+ readonly mappings = signal<MappingView[]>([]);
+ mappingsFor(appKey: string) { return this.mappings().filter(m => m.appKey === appKey); }
  readonly loading = signal(true);
  readonly open = signal<string | null>(null);
  readonly busy = signal(false);
@@ -158,6 +180,7 @@ export class IntegrationsPage {
  load() {
   api('/api/admin/integrations/connections', elasticConnectionListSchema)
    .then(r => this.connections.set(r.connections)).catch(e => this.fail(e.message)).finally(() => this.loading.set(false));
+  api('/api/admin/integrations/mappings', mappingListSchema).then(r => this.mappings.set(r.mappings)).catch(() => {});
  }
  host(url: string) { try { return new URL(url).host; } catch { return url; } }
  familyText(s: string) { return FAMILY_STATUS_TEXT[s] ?? s; }

@@ -4,6 +4,7 @@ import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } fro
 import { filter } from 'rxjs';
 import { IconComponent, MarkComponent } from './icon.component';
 import { InboxService } from './inbox.service';
+import { HEALTH_LABEL, HEALTH_TONE, ObservabilityService } from './observability.service';
 import { api, AppState } from './state';
 
 type AppAvailability = ReturnType<typeof availabilityResponseSchema.parse>['apps'][number];
@@ -84,11 +85,14 @@ function initialTheme(): 'light' | 'dark' {
     <div class="sidenav-label" id="nav-apps">Applications</div>
     <ul class="nav-list" aria-labelledby="nav-apps">
      @for (a of list.apps; track a.appKey) {
-      <li><a class="tab" routerLink="/" [fragment]="'app-' + a.appKey">
+      <li><a class="tab" [routerLink]="['/apps', a.appKey]" routerLinkActive="active" ariaCurrentWhenActive="page">
        <span class="app-glyph" aria-hidden="true">{{ a.displayName.charAt(0) }}</span>
        <span class="tab-name">{{ a.displayName }}</span>
+       @if (serviceHealth(a.appKey); as h) {
+        <span class="health-mark" [attr.data-tone]="healthTone[h]" [attr.title]="'Service ' + healthLabel[h].toLowerCase()"><rs-icon name="alert" [size]="13" /></span>
+       }
        <span class="status-dot" [attr.data-tone]="tone(a)" aria-hidden="true"></span>
-       <span class="sr-only">, {{ !a.servable ? 'unavailable' : a.dormant ? 'idle' : a.connection.state.replace('_', ' ') }}</span>
+       <span class="sr-only">, {{ !a.servable ? 'unavailable' : a.dormant ? 'idle' : a.connection.state.replace('_', ' ') }}@if (serviceHealth(a.appKey); as h) {, service {{ healthLabel[h].toLowerCase() }}}</span>
       </a></li>
      }
     </ul>
@@ -113,8 +117,8 @@ function initialTheme(): 'light' | 'dark' {
    <div class="sidenav-footer"><span class="status-dot" [attr.data-tone]="state.healthy() ? 'safe' : 'destructive'" aria-hidden="true"></span><p role="status">{{ state.health() }}</p></div>
   </nav>
 
-  <!-- App-wide polite announcements (new customer chats, send results); never moves focus. -->
-  <p class="sr-only" role="status" aria-live="polite">{{ inbox.announcement() }}</p>
+  <!-- App-wide polite announcements (new customer chats, send results, service health changes); never moves focus. -->
+  <p class="sr-only" role="status" aria-live="polite">{{ announcement() }}</p>
   <main id="main" class="scroll-area" tabindex="-1">
    <router-outlet />
   </main>
@@ -124,6 +128,12 @@ function initialTheme(): 'light' | 'dark' {
 export class ShellComponent {
  readonly state = inject(AppState);
  readonly inbox = inject(InboxService);
+ readonly observability = inject(ObservabilityService);
+ readonly announcement = signal('');
+ readonly healthLabel = HEALTH_LABEL;
+ readonly healthTone = HEALTH_TONE;
+ /** Degraded or critical service health for the nav marker; healthy, unknown and stale show nothing there. */
+ serviceHealth(appKey: string) { const s = this.observability.byApp().get(appKey)?.state; return s === 'degraded' || s === 'critical' ? s : null; }
  readonly dark = signal(initialTheme() === 'dark');
  private readonly router = inject(Router);
 
@@ -132,6 +142,11 @@ export class ShellComponent {
   // Agents get live inbox updates (and the unread count) on every page while signed in.
   this.inbox.appName = k => this.state.appName(k);
   effect(() => { if (this.state.can('chat.read')) this.inbox.start(); });
+  this.observability.appName = k => this.state.appName(k);
+  // One app-wide live region: the latest message from either source.
+  effect(() => { const a = this.inbox.announcement(); if (a) untracked(() => this.announcement.set(a)); });
+  effect(() => { const a = this.observability.announcement(); if (a) untracked(() => this.announcement.set(a)); });
+  effect(() => { if (this.state.can('observability.health')) untracked(() => this.observability.start()); });
   effect(() => { if (this.state.can('chat.availability')) untracked(() => this.loadAvailability()); });
   // A custom element has no bootstrap component, so start routing explicitly.
   this.router.initialNavigation();
