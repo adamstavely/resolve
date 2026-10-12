@@ -1,10 +1,13 @@
-import { Component, effect, inject, input, signal, untracked } from '@angular/core';
+import { Component, CUSTOM_ELEMENTS_SCHEMA, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { ticketDetailResponseSchema } from '../../../../../packages/contracts/src/index';
 import { z } from 'zod';
 import { IconComponent } from '../icon.component';
 import { api, AppState, fullTime, relativeTime } from '../state';
 import { ThreadComponent } from './thread.component';
+import { ComposerComponent } from './composer.component';
+import { MessageSender, postAction } from '../actions';
+import { RESOLVE_ELEMENTS, ResolveConfirmDialog } from '../elements';
 
 /** The shell focuses <main> on navigation; once async content arrives, hand focus to the page heading (2.4.3). */
 function focusHeadingAfterLoad() {
@@ -15,7 +18,8 @@ type Detail = z.infer<typeof ticketDetailResponseSchema>['detail'];
 
 @Component({
  selector: 'rs-ticket-detail-page',
- imports: [RouterLink, IconComponent, ThreadComponent],
+ imports: [RouterLink, IconComponent, ThreadComponent, ComposerComponent, ...RESOLVE_ELEMENTS],
+ schemas: [CUSTOM_ELEMENTS_SCHEMA],
  template: `
 <div class="page">
  <a class="back" routerLink="/tickets"><rs-icon name="arrowL" [size]="15" />All tickets</a>
@@ -26,8 +30,14 @@ type Detail = z.infer<typeof ticketDetailResponseSchema>['detail'];
   </header>
   <div class="detail-cols">
    <section class="card" aria-labelledby="thread-title">
-    <div class="card-head"><h2 class="card-title" id="thread-title">Thread</h2><span class="card-meta">Read-only</span></div>
+    <div class="card-head"><h2 class="card-title" id="thread-title">Thread</h2></div>
     <div class="pad"><rs-thread [messages]="d.messages" /></div>
+    @if (state.can('ticket.reply') || state.can('ticket.note')) {
+     <div class="pad composer-wrap">
+      <rs-composer fieldId="ticket-composer" [canReply]="state.can('ticket.reply')" [canNote]="state.can('ticket.note')" [pending]="sender.pending()"
+       (send)="sender.send($event)" (retry)="sender.retry($event)" (check)="sender.check($event)" (discard)="sender.discard($event)" />
+     </div>
+    }
    </section>
    <aside class="card" aria-labelledby="facts-title">
     <div class="card-head"><h2 class="card-title" id="facts-title">Details</h2></div>
@@ -44,6 +54,22 @@ type Detail = z.infer<typeof ticketDetailResponseSchema>['detail'];
      <div><dt>Created</dt><dd><time [attr.datetime]="d.ticket.createdAt">{{ fullTime(d.ticket.createdAt) }}</time></dd></div>
      <div><dt>Updated</dt><dd><time [attr.datetime]="d.ticket.updatedAt">{{ fullTime(d.ticket.updatedAt) }}</time></dd></div>
     </dl>
+    @if (state.can('ticket.assign') || state.can('ticket.status')) {
+     <div class="pad ticket-actions">
+      @if (state.can('ticket.assign')) {
+       @if (d.ticket.assigneeName === state.user()?.displayName) { <button class="btn btn-sm" type="button" (click)="assign('unassigned')" [disabled]="busy()">Unassign</button> }
+       @else { <button class="btn btn-sm" type="button" (click)="assign('me')" [disabled]="busy()">Assign to me</button> }
+      }
+      @if (state.can('ticket.status')) {
+       <label for="ticket-status">Change status
+        <select id="ticket-status" [value]="d.ticket.status.category" (change)="requestStatus($any($event.target))">
+         <option value="open">Open</option><option value="pending">Waiting on customer</option><option value="closed">Resolved</option>
+        </select>
+       </label>
+      }
+      @if (actionMessage()) { <p class="small" [attr.role]="actionError() ? 'alert' : 'status'">{{ actionMessage() }}</p> }
+     </div>
+    }
    </aside>
   </div>
  } @else if (error()) {
@@ -52,6 +78,10 @@ type Detail = z.infer<typeof ticketDetailResponseSchema>['detail'];
  } @else {
   <p role="status" class="muted">Loading ticket…</p>
  }
+ <p class="sr-only" role="status">{{ announcement() }}</p>
+ <resolve-confirm-dialog #closeDialogRef tone="destructive" heading="Resolve this ticket?"
+  description="The ticket is marked resolved in the application and the requester is notified by the application's own rules."
+  confirmLabel="Resolve ticket" cancelLabel="Keep open" (confirmed)="setStatus('closed')" (cancelled)="cancelClose()"/>
 </div>`,
 })
 export class TicketDetailPage {
@@ -62,14 +92,40 @@ export class TicketDetailPage {
  readonly error = signal('');
  readonly relativeTime = relativeTime;
  readonly fullTime = fullTime;
+ readonly busy = signal(false);
+ readonly actionMessage = signal('');
+ readonly actionError = signal(false);
+ readonly announcement = signal('');
+ readonly closeDialog = viewChild('closeDialogRef', { read: ResolveConfirmDialog });
+ private statusSelect?: HTMLSelectElement;
+ private readonly base = () => `/api/apps/${encodeURIComponent(this.app())}/tickets/${encodeURIComponent(this.id())}`;
+ readonly sender = new MessageSender(() => this.base() + '/messages', () => this.load(false), t => { this.announcement.set(''); setTimeout(() => this.announcement.set(t), 50); });
  constructor() {
   effect(() => {
-   const [app, id] = [this.app(), this.id()];
-   untracked(() => {
-    this.detail.set(undefined); this.error.set('');
-    api(`/api/apps/${encodeURIComponent(app)}/tickets/${encodeURIComponent(id)}`, ticketDetailResponseSchema)
-     .then(r => this.detail.set(r.detail)).catch(e => this.error.set(e.message)).finally(() => focusHeadingAfterLoad());
-   });
+   void [this.app(), this.id()];
+   untracked(() => { this.detail.set(undefined); this.error.set(''); this.load(true); });
   });
+ }
+ load(focus: boolean) {
+  api(this.base(), ticketDetailResponseSchema)
+   .then(r => this.detail.set(r.detail)).catch(e => this.error.set(e.message)).finally(() => { if (focus) focusHeadingAfterLoad(); });
+ }
+ async assign(assignee: 'me' | 'unassigned') { await this.act('/assign', { assignee, expectedVersion: this.detail()!.ticket.version }, assignee === 'me' ? 'Assigned to you.' : 'Unassigned.'); }
+ /** Resolving asks for confirmation; other status changes apply directly. */
+ requestStatus(select: HTMLSelectElement) {
+  const value = select.value as 'open' | 'pending' | 'closed';
+  if (value === 'closed') { this.statusSelect = select; this.closeDialog()?.show(); return; }
+  void this.setStatus(value);
+ }
+ cancelClose() { if (this.statusSelect) this.statusSelect.value = this.detail()!.ticket.status.category; }
+ async setStatus(statusCategory: 'open' | 'pending' | 'closed') {
+  await this.act('/status', { statusCategory, expectedVersion: this.detail()!.ticket.version }, 'Status updated.');
+ }
+ private async act(suffix: string, body: unknown, success: string) {
+  this.busy.set(true);
+  const r = await postAction(this.base() + suffix, body);
+  this.busy.set(false);
+  this.actionError.set(!r.ok); this.actionMessage.set(r.ok ? success : r.message);
+  this.load(false);
  }
 }

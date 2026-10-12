@@ -1,5 +1,5 @@
-import { Component, CUSTOM_ELEMENTS_SCHEMA, signal } from '@angular/core';
-import { RESOLVE_ELEMENTS } from '../elements';
+import { Component, CUSTOM_ELEMENTS_SCHEMA, signal, viewChild } from '@angular/core';
+import { RESOLVE_ELEMENTS, ResolveConfirmDialog } from '../elements';
 
 /** Development page exercising the Web Component bridge (phase 0 component gate). */
 @Component({
@@ -24,14 +24,14 @@ import { RESOLVE_ELEMENTS } from '../elements';
     <div class="row">
      <button class="btn btn-primary" type="submit">Check form values</button>
      <button class="btn" type="reset">Reset</button>
-     <button class="btn btn-ghost" type="button" (click)="discardOpen.set(true)">Discard draft…</button>
+     <button class="btn btn-ghost" type="button" (click)="discardDialog()?.show()">Discard draft…</button>
     </div>
    </form>
    <p role="status">{{ result() }}</p>
    <p class="muted small">Angular model: {{ appName() || '—' }} · {{ contact() || '—' }} · {{ team() || '—' }}</p>
   </div>
  </section>
- <resolve-confirm-dialog [(open)]="discardOpen" tone="destructive" heading="Discard this draft?"
+ <resolve-confirm-dialog #discardDialogRef tone="destructive" heading="Discard this draft?"
   description="The values in this local check will be cleared. This does not affect any application."
   confirmLabel="Discard draft" cancelLabel="Keep editing" (confirmed)="discard()"/>
 </div>`,
@@ -40,7 +40,7 @@ export class ComponentsPage {
  readonly appName = signal('');
  readonly contact = signal('');
  readonly team = signal('');
- readonly discardOpen = signal(false);
+ readonly discardDialog = viewChild('discardDialogRef', { read: ResolveConfirmDialog });
  readonly result = signal('No values checked yet.');
  readonly teams = [
   { value: 'payroll-sre', label: 'Payroll SRE' },

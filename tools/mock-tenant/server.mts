@@ -85,7 +85,7 @@ async function startTenant(t: TenantConfig) {
  const staff = [...people.filter(p => p.role === 'agent').map(p => ({ principalId: p.user.principalId, name: names[p.user.idpSub] ?? p.user.idpSub })),
   { principalId: 'principal_priya', name: 'Priya Shah' }, { principalId: 'principal_tom', name: 'Tom Okafor' }];
  const data = buildTenant(t.appKey, t.seed, { tickets: t.tickets, conversations: t.conversations }, staff);
- const nameOf = (principalId: string) => staff.find(s => s.principalId === principalId)?.name ?? people.find(p => p.user.principalId === principalId)?.user.idpSub ?? 'Agent';
+ const nameOf = (principalId: string) => { const p = people.find(x => x.user.principalId === principalId); return p ? names[p.user.idpSub] ?? p.user.idpSub : staff.find(x => x.principalId === principalId)?.name ?? 'Agent'; };
  const store = new TenantStore(t.appKey, data, nameOf);
  const viewerFor = (tenantUserId: string): Viewer => {
   const p = people.find(x => x.user.id === tenantUserId);
@@ -121,11 +121,13 @@ async function startTenant(t: TenantConfig) {
    const args = rpc.params?.arguments ?? {};
    let result: unknown;
    if (tool === 'list_changes') {
-    result = store.changes(viewer, args.after);
+    // Fix the starting point before waiting, so changes that arrive during the wait are returned.
+    const after = args.after ?? store.changes(viewer, undefined).cursor;
+    result = store.changes(viewer, after);
     const wait = Math.min(Number(args.waitSeconds ?? 0), 25);
     if (wait > 0 && (result as { events: unknown[]; resync: boolean }).events.length === 0 && !(result as { resync: boolean }).resync) {
      await store.waitForChange(wait * 1000);
-     result = store.changes(viewer, args.after);
+     result = store.changes(viewer, after);
     }
    } else result = store.call(viewer, tool, args) ?? callTool(data, viewer, tool, args);
    // Fault injection: the write committed, but the response is lost.

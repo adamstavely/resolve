@@ -101,6 +101,6 @@ export type Operation = z.infer<typeof operationSchema>;
 export const inboxEventSchema = z.discriminatedUnion('type', [
  z.strictObject({ type: z.literal('change'), appKey: appKeySchema, itemType: z.enum(['conversation', 'ticket']), itemId: z.string(), kind: z.enum(CHANGE_KINDS), at: isoDateTimeSchema }),
  z.strictObject({ type: z.literal('resync'), appKey: appKeySchema }),
- z.strictObject({ type: z.literal('monitor'), apps: z.array(z.strictObject({ appKey: appKeySchema, state: z.enum(['live', 'not_connected', 'reconnect_required', 'dormant', 'unavailable', 'error']) })) }),
+ z.strictObject({ type: z.literal('monitor'), apps: z.array(z.strictObject({ appKey: appKeySchema, state: z.enum(['connecting', 'live', 'not_connected', 'reconnect_required', 'dormant', 'unavailable', 'error']) })) }),
 ]);
 export type InboxEvent = z.infer<typeof inboxEventSchema>;

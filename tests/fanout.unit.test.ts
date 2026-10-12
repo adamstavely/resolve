@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import type { RegistryApp } from '../packages/contracts/src';
+import { TARGET_TOOL_VERSIONS, type RegistryApp } from '../packages/contracts/src';
 import { fanOut } from '../apps/api/lib/fleet/fanout';
 import { resetHealthCache } from '../apps/api/lib/tenants/protocol';
 
 const app = (appKey: string, o: Partial<RegistryApp> = {}): RegistryApp => ({ appKey, displayName: appKey, supportOrigin: `https://${appKey}.test`, routable: true,
  dormant: false, state: 'active', deploymentVersion: 'v', protocolVersions: [1], lastActivityAt: null, ...o });
-const compatible = { protocolVersions: [1], tools: { list_tickets: 2, get_ticket: 1, list_conversations: 1, get_conversation: 2, get_support_dashboard: 1, list_support_activity: 1 } };
+const compatible = { protocolVersions: [1], tools: { ...TARGET_TOOL_VERSIONS } };
 let probed: string[];
 
 beforeEach(() => {

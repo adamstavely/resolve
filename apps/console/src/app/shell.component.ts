@@ -47,6 +47,10 @@ function initialTheme(): 'light' | 'dark' {
    <ul class="nav-list">
     <li><a class="tab" routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" ariaCurrentWhenActive="page">
      <span class="nav-ic"><rs-icon name="grid" [size]="17" /></span><span class="tab-name">Home</span></a></li>
+    @if (state.can('chat.read')) {
+     <li><a class="tab" routerLink="/inbox" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <span class="nav-ic"><rs-icon name="inbox" [size]="17" /></span><span class="tab-name">Inbox</span></a></li>
+    }
     @if (state.can('ticket.read')) {
      <li><a class="tab" routerLink="/tickets" routerLinkActive="active" ariaCurrentWhenActive="page">
       <span class="nav-ic"><rs-icon name="ticket" [size]="17" /></span><span class="tab-name">Tickets</span></a></li>

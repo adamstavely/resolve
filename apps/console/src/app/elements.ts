@@ -72,6 +72,12 @@ export class ResolveConfirmDialog {
   bind(this.element, () => ({ open: this.open(), heading: this.heading(), description: this.description(), confirmLabel: this.confirmLabel(),
    cancelLabel: this.cancelLabel(), tone: this.tone(), pending: this.pending() }));
  }
+ /**
+  * Open the dialog. Prefer this to binding [open]: after the element closes itself, a parent that reopens within
+  * the same change-detection cycle would leave the binding's last value unchanged and the dialog would stay shut.
+  */
+ show() { this.open.set(true); }
+
  onConfirm(event: Event) {
   this.confirmed.emit(event);
   if (!event.defaultPrevented) this.open.set(false);

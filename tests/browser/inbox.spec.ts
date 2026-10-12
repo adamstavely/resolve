@@ -1,0 +1,240 @@
+import { test, expect, type Browser, type Page } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+import { signInAs } from './helpers';
+
+/*
+ * Phase 3 exit criteria (plan 00) against the mock fleet: audit correlation to the human and tenant record,
+ * visible uncertain outcomes, no automatic retry of non-idempotent actions, tenant permissions rechecked
+ * independently of Resolve's UI. Each test creates its own conversation.
+ */
+const ORIGIN = 'http://127.0.0.1:4200';
+const TENANT = { payroll: 'http://127.0.0.1:3301', hr: 'http://127.0.0.1:3302' } as const;
+const tags = ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'];
+const tenant = (app: keyof typeof TENANT, path: string, body: unknown) =>
+ fetch(TENANT[app] + path, { method: 'POST', body: JSON.stringify(body) }).then(r => r.json());
+const unique = (label: string) => `${label} ${Math.random().toString(36).slice(2, 7)}`;
+
+async function signedIn(browser: Browser, name: string, connect: string[] = []) {
+ const ctx = await browser.newContext({ baseURL: ORIGIN });
+ const page = await ctx.newPage();
+ await signInAs(page, name);
+ await expect(page.getByText(`Signed in as ${name}`)).toBeVisible();
+ for (const app of connect) {
+  await page.goto(`/api/connect/${app}/start`);
+  await expect(page.locator('p.notice')).toContainText('Connected to');
+ }
+ return page;
+}
+
+/** A customer writes in; returns the new conversation's id and subject. */
+async function customerWrites(app: keyof typeof TENANT, label: string, team = 'team_support') {
+ const subject = unique(label);
+ const { conversationId } = await tenant(app, '/dev/customer-message', { text: subject, team });
+ return { conversationId: conversationId as string, subject };
+}
+const queueItem = (page: Page, subject: string) => page.getByRole('list', { name: 'Conversations' }).getByRole('button', { name: new RegExp(subject) });
+const thread = (page: Page) => page.getByRole('region', { name: /./ }).filter({ has: page.getByRole('list', { name: 'Messages', exact: true }) });
+async function openInbox(page: Page) {
+ await page.goto('/inbox');
+ await expect(page.getByRole('group', { name: 'Monitored applications' })).toContainText('Payroll · Live');
+}
+
+test('new customer chats arrive live, are announced, and do not move focus', async ({ browser }) => {
+ const sam = await signedIn(browser, 'Sam Agent', ['payroll']);
+ await openInbox(sam);
+ await sam.getByLabel('Show').focus();
+ const { subject } = await customerWrites('payroll', 'Payslip missing');
+ await expect(queueItem(sam, subject)).toBeVisible();
+ await expect(sam.locator('[aria-live=polite]')).toContainText(`in Payroll: ${subject}`);
+ await expect(sam.getByLabel('Show')).toBeFocused();
+ await sam.context().close();
+});
+
+test('a reply is sent as the human, confirmed from the tenant, and correlated in the audit', async ({ browser }) => {
+ const sam = await signedIn(browser, 'Sam Agent', ['payroll']);
+ const { conversationId, subject } = await customerWrites('payroll', 'Cannot log in');
+ await openInbox(sam);
+ await queueItem(sam, subject).click();
+ const text = unique('We have reset your session');
+ await sam.getByLabel('Reply, visible to the customer').fill(text);
+ await sam.getByRole('button', { name: 'Send reply' }).click();
+ await expect(sam.getByRole('list', { name: 'Messages', exact: true }).getByRole('listitem').filter({ hasText: text })).toContainText('Sam Agent');
+ await expect(sam.getByRole('list', { name: 'Messages awaiting confirmation' })).toHaveCount(0);
+
+ // Tenant record names the human; Resolve's audit links the operation to that record.
+ const detail = await (await sam.request.get(`/api/apps/payroll/conversations/${conversationId}`)).json();
+ const sent = detail.detail.messages.find((m: { content: string }) => m.content === text);
+ expect(sent).toMatchObject({ authorName: 'Sam Agent', senderType: 'agent', isInternal: false });
+ const ada = await signedIn(browser, 'Ada Admin');
+ const audit = await (await ada.request.get('/api/audit?limit=100')).json();
+ const events = audit.events.filter((e: { operation: string; summary: { target?: string } }) => e.operation === 'conversation.reply' && e.summary.target === conversationId);
+ expect(events.map((e: { outcome: string }) => e.outcome).sort()).toEqual(['pending', 'succeeded']);
+ expect(events.find((e: { outcome: string }) => e.outcome === 'succeeded')).toMatchObject({ actor: 'Sam Agent', summary: { app: 'payroll', tenantRecord: sent.id } });
+ expect(JSON.stringify(events)).not.toContain(text); // message content is never audited
+ expect((await new AxeBuilder({ page: sam }).withTags(tags).analyze()).violations).toEqual([]);
+ await sam.context().close(); await ada.context().close();
+});
+
+test('a lost response is shown as not confirmed, never retried automatically, and settles once', async ({ browser }) => {
+ const sam = await signedIn(browser, 'Sam Agent', ['payroll']);
+ const { conversationId, subject } = await customerWrites('payroll', 'Expense stuck');
+ await openInbox(sam);
+ await queueItem(sam, subject).click();
+ const text = unique('Approved on our side');
+ await tenant('payroll', '/dev/fail', { mode: 'drop', sub: 'mock|sam' });
+ try {
+  await sam.getByLabel('Reply, visible to the customer').fill(text);
+  await sam.getByRole('button', { name: 'Send reply' }).click();
+  const pending = sam.getByRole('list', { name: 'Messages awaiting confirmation' });
+  await expect(pending).toContainText('Not confirmed');
+  await expect(pending).toContainText('It may have been applied');
+ } finally {
+  await tenant('payroll', '/dev/fail', { mode: null, sub: 'mock|sam' });
+ }
+ // The tenant committed exactly one copy; Resolve did not resend on its own.
+ const count = async () => (await (await sam.request.get(`/api/apps/payroll/conversations/${conversationId}`)).json())
+  .detail.messages.filter((m: { content: string }) => m.content === text).length;
+ await sam.waitForTimeout(1000);
+ expect(await count()).toBe(1);
+ // The user's retry reuses the operation id: the tenant replays instead of sending twice.
+ await sam.getByRole('button', { name: 'Retry sending this reply' }).click();
+ await expect(sam.getByRole('list', { name: 'Messages awaiting confirmation' })).toHaveCount(0);
+ expect(await count()).toBe(1);
+ await sam.context().close();
+});
+
+test('check result reconciles an uncertain note without resending', async ({ browser }) => {
+ const sam = await signedIn(browser, 'Sam Agent', ['payroll']);
+ const { conversationId, subject } = await customerWrites('payroll', 'Duplicate invoice');
+ await openInbox(sam);
+ await queueItem(sam, subject).click();
+ await sam.getByText('Internal note', { exact: true }).click();
+ const text = unique('Checked billing ledger');
+ await tenant('payroll', '/dev/fail', { mode: 'drop', sub: 'mock|sam' });
+ try {
+  await sam.getByLabel('Internal note, visible to the support team only').fill(text);
+  await sam.getByRole('button', { name: 'Add note' }).click();
+  await expect(sam.getByRole('list', { name: 'Messages awaiting confirmation' })).toContainText('Not confirmed');
+ } finally {
+  await tenant('payroll', '/dev/fail', { mode: null, sub: 'mock|sam' });
+ }
+ await sam.getByRole('button', { name: 'Check result' }).click();
+ await expect(sam.getByRole('list', { name: 'Messages awaiting confirmation' })).toHaveCount(0);
+ const note = sam.getByRole('list', { name: 'Messages', exact: true }).getByRole('listitem').filter({ hasText: text });
+ await expect(note).toContainText('Internal note');
+ const msgs = (await (await sam.request.get(`/api/apps/payroll/conversations/${conversationId}`)).json()).detail.messages;
+ expect(msgs.filter((m: { content: string }) => m.content === text)).toHaveLength(1);
+ await sam.context().close();
+});
+
+test('another agent’s assignment appears live, and a stale assignment is refused', async ({ browser }) => {
+ const { conversationId, subject } = await customerWrites('payroll', 'Leave balance wrong');
+ const sam = await signedIn(browser, 'Sam Agent', ['payroll']);
+ const ada = await signedIn(browser, 'Ada Admin', ['payroll']);
+ await openInbox(sam); await openInbox(ada);
+ await queueItem(sam, subject).click();
+ const seen = (await (await sam.request.get(`/api/apps/payroll/conversations/${conversationId}`)).json()).detail.conversation.version;
+ await queueItem(ada, subject).click();
+ await ada.getByRole('button', { name: 'Assign to me' }).click();
+ await expect(ada.getByText('Assigned to you.')).toBeVisible();
+ // Sam's open thread reflects Ada's ownership without a reload.
+ await expect(sam.getByText('Owner: Ada Admin')).toBeVisible();
+ // A request carrying the version Sam saw before is refused instead of overwriting Ada.
+ const r = await sam.request.post(`/api/apps/payroll/conversations/${conversationId}/assign`, {
+  headers: { Origin: ORIGIN, 'Content-Type': 'application/json' }, data: JSON.stringify({ assignee: 'me', expectedVersion: seen }),
+ });
+ expect(r.status()).toBe(409);
+ expect(await r.json()).toMatchObject({ operation: { state: 'failed', failureCode: 'CONFLICT', next: 'refresh_and_retry' }, message: 'This item changed since you opened it. Refresh and try again.' });
+ await sam.context().close(); await ada.context().close();
+});
+
+test('the tenant rechecks permissions independently of Resolve', async ({ browser }) => {
+ // Bo is an agent in Resolve but only an observer in HR.
+ const bo = await signedIn(browser, 'Bo Blockable', ['hr']);
+ const { conversationId } = await customerWrites('hr', 'Access request', 'team_billing');
+ const r = await bo.request.post(`/api/apps/hr/conversations/${conversationId}/messages`, {
+  headers: { Origin: ORIGIN, 'Content-Type': 'application/json' },
+  data: JSON.stringify({ kind: 'reply', content: 'Hello', operationId: crypto.randomUUID() }),
+ });
+ expect(r.status()).toBe(403);
+ const body = await r.json();
+ expect(body.operation).toMatchObject({ state: 'denied', failureCode: 'FORBIDDEN', next: 'none' });
+ expect(body.message).toBe('The application does not allow you to do this.');
+ await bo.context().close();
+});
+
+test('observers get no action controls, and Resolve refuses their direct requests', async ({ browser }) => {
+ const olive = await signedIn(browser, 'Olive Observer', ['payroll']);
+ const { conversationId, subject } = await customerWrites('payroll', 'Report shows old data');
+ await openInbox(olive);
+ await queueItem(olive, subject).click();
+ await expect(olive.getByRole('button', { name: 'Assign to me' })).toHaveCount(0);
+ await expect(olive.getByRole('button', { name: 'Send reply' })).toHaveCount(0);
+ const r = await olive.request.post(`/api/apps/payroll/conversations/${conversationId}/messages`, {
+  headers: { Origin: ORIGIN, 'Content-Type': 'application/json' }, data: JSON.stringify({ kind: 'reply', content: 'Hi', operationId: crypto.randomUUID() }),
+ });
+ expect(r.status()).toBe(403);
+ const csrf = await olive.request.post(`/api/apps/payroll/conversations/${conversationId}/read`, { headers: { 'Content-Type': 'application/json' }, data: '{}' });
+ expect(csrf.status()).toBe(403);
+ await olive.context().close();
+});
+
+test('closing a conversation asks for confirmation', async ({ browser }) => {
+ const sam = await signedIn(browser, 'Sam Agent', ['payroll']);
+ const { subject } = await customerWrites('payroll', 'Thanks, all sorted');
+ await openInbox(sam);
+ await queueItem(sam, subject).click();
+ await sam.getByRole('button', { name: 'Close…' }).click();
+ const dialog = sam.getByRole('alertdialog', { name: 'Close this conversation?' });
+ await expect(dialog.getByRole('button', { name: 'Keep open' })).toBeFocused();
+ await dialog.getByRole('button', { name: 'Keep open' }).click();
+ await expect(sam.getByRole('button', { name: 'Close…' })).toBeFocused();
+ await sam.getByRole('button', { name: 'Close…' }).click();
+ await dialog.getByRole('button', { name: 'Close conversation' }).click();
+ await expect(sam.getByText('Conversation closed.')).toBeVisible();
+ await expect(sam.getByRole('button', { name: 'Reopen' })).toBeVisible();
+ await sam.context().close();
+});
+
+test('blocking a person closes their live stream', async ({ browser }) => {
+ const bo = await signedIn(browser, 'Bo Blockable', ['payroll']);
+ await bo.evaluate(() => { (window as unknown as { es: EventSource }).es = new EventSource('/api/inbox/stream'); });
+ await expect.poll(() => bo.evaluate(() => (window as unknown as { es: EventSource }).es.readyState)).toBe(1);
+ const ada = await signedIn(browser, 'Ada Admin');
+ const [target] = (await (await ada.request.get('/api/admin/users?q=Bo Blockable')).json()).users;
+ const post = (enabled: boolean, reason: string) => ada.request.post(`/api/admin/users/${target.id}/access`, { headers: { Origin: ORIGIN, 'Content-Type': 'application/json' }, data: JSON.stringify({ enabled, reason }) });
+ try {
+  await post(false, 'Testing stream revocation');
+  // The server closes the stream at its next session check; the browser's reconnect is refused (401).
+  await expect.poll(() => bo.evaluate(() => (window as unknown as { es: EventSource }).es.readyState), { timeout: 30_000 }).toBe(2);
+ } finally {
+  await post(true, 'Test complete');
+ }
+ await bo.context().close(); await ada.context().close();
+});
+
+test('ticket reply, assignment and confirmed resolution', async ({ browser }) => {
+ const ada = await signedIn(browser, 'Ada Admin', ['payroll']);
+ const list = await (await ada.request.get('/api/apps/payroll/tickets?statusCategory=open')).json();
+ const ticket = list.tickets[0];
+ await ada.goto(`/tickets/payroll/${ticket.id}`);
+ const text = unique('Fixed in the next payroll run');
+ await ada.getByLabel('Reply, visible to the customer').fill(text);
+ await ada.getByRole('button', { name: 'Send reply' }).click();
+ await expect(ada.getByRole('list', { name: 'Messages', exact: true })).toContainText(text);
+ if (await ada.getByRole('button', { name: 'Assign to me' }).count()) {
+  await ada.getByRole('button', { name: 'Assign to me' }).click();
+  await expect(ada.getByText('Assigned to you.')).toBeVisible();
+ }
+ await ada.getByLabel('Change status').selectOption('closed');
+ const dialog = ada.getByRole('alertdialog', { name: 'Resolve this ticket?' });
+ await dialog.getByRole('button', { name: 'Keep open' }).click();
+ await expect(dialog).toBeHidden();
+ await expect(ada.getByLabel('Change status')).toHaveValue('open');
+ await ada.getByLabel('Change status').selectOption('closed');
+ await dialog.getByRole('button', { name: 'Resolve ticket' }).click();
+ await expect(ada.getByText('Status updated.')).toBeVisible();
+ await expect(ada.getByRole('complementary', { name: 'Details' })).toContainText('Resolved');
+ expect((await new AxeBuilder({ page: ada }).withTags(tags).analyze()).violations).toEqual([]);
+ await ada.context().close();
+});
