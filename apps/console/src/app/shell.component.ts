@@ -1,7 +1,8 @@
-import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { Component, DestroyRef, effect, inject, signal } from '@angular/core';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
 import { IconComponent, MarkComponent } from './icon.component';
+import { InboxService } from './inbox.service';
 import { AppState } from './state';
 
 /** Saved preference, else the operating system's. */
@@ -19,7 +20,7 @@ function initialTheme(): 'light' | 'dark' {
 <div class="app-bg" aria-hidden="true"></div>
 <div class="shell">
  <header class="topbar">
-  <a class="brand" routerLink="/" aria-label="Resolve home">
+  <a class="brand" routerLink="/" aria-label="Resolve home" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" ariaCurrentWhenActive="page">
    <span class="brand-mark"><rs-mark [size]="18" /></span>
    <span class="brand-name">Resolve</span>
    <span class="brand-tag">Unified support operations</span>
@@ -44,22 +45,22 @@ function initialTheme(): 'light' | 'dark' {
 
  <div class="workbench">
   <nav class="sidenav" aria-label="Primary">
+   @if (state.can('chat.read') || state.can('ticket.read')) {
    <ul class="nav-list">
-    <li><a class="tab" routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" ariaCurrentWhenActive="page">
-     <span class="nav-ic"><rs-icon name="grid" [size]="17" /></span><span class="tab-name">Home</span></a></li>
     @if (state.can('chat.read')) {
      <li><a class="tab" routerLink="/inbox" routerLinkActive="active" ariaCurrentWhenActive="page">
-      <span class="nav-ic"><rs-icon name="inbox" [size]="17" /></span><span class="tab-name">Inbox</span></a></li>
+      <span class="nav-ic"><rs-icon name="inbox" [size]="17" /></span><span class="tab-name">Inbox</span>
+      @if (inbox.unreadCount(); as n) {
+       <span class="nav-count" aria-hidden="true">{{ n }}{{ inbox.countIsPartial() ? '+' : '' }}</span>
+       <span class="sr-only">, {{ inbox.countIsPartial() ? 'at least ' : '' }}{{ n }} unread</span>
+      }</a></li>
     }
     @if (state.can('ticket.read')) {
      <li><a class="tab" routerLink="/tickets" routerLinkActive="active" ariaCurrentWhenActive="page">
       <span class="nav-ic"><rs-icon name="ticket" [size]="17" /></span><span class="tab-name">Tickets</span></a></li>
     }
-    @if (state.can('chat.read')) {
-     <li><a class="tab" routerLink="/conversations" routerLinkActive="active" ariaCurrentWhenActive="page">
-      <span class="nav-ic"><rs-icon name="chat" [size]="17" /></span><span class="tab-name">Conversations</span></a></li>
-    }
    </ul>
+   }
    @if (state.apps(); as list) {
     <div class="sidenav-label" id="nav-apps">Applications</div>
     <ul class="nav-list" aria-labelledby="nav-apps">
@@ -79,13 +80,11 @@ function initialTheme(): 'light' | 'dark' {
      <li><a class="tab" routerLink="/audit" routerLinkActive="active" ariaCurrentWhenActive="page"><span class="nav-ic"><rs-icon name="doc" [size]="17" /></span><span class="tab-name">Audit</span></a></li>
     </ul>
    }
-   <div class="sidenav-label" id="nav-dev">Development</div>
-   <ul class="nav-list" aria-labelledby="nav-dev">
-    <li><a class="tab" routerLink="/components" routerLinkActive="active" ariaCurrentWhenActive="page"><span class="nav-ic"><rs-icon name="sliders" [size]="17" /></span><span class="tab-name">Component check</span></a></li>
-   </ul>
    <div class="sidenav-footer"><span class="status-dot" [attr.data-tone]="state.healthy() ? 'safe' : 'destructive'" aria-hidden="true"></span><p role="status">{{ state.health() }}</p></div>
   </nav>
 
+  <!-- App-wide polite announcements (new customer chats, send results); never moves focus. -->
+  <p class="sr-only" role="status" aria-live="polite">{{ inbox.announcement() }}</p>
   <main id="main" class="scroll-area" tabindex="-1">
    <router-outlet />
   </main>
@@ -94,11 +93,15 @@ function initialTheme(): 'light' | 'dark' {
 })
 export class ShellComponent {
  readonly state = inject(AppState);
+ readonly inbox = inject(InboxService);
  readonly dark = signal(initialTheme() === 'dark');
  private readonly router = inject(Router);
 
  constructor() {
   document.documentElement.dataset['theme'] = this.dark() ? 'dark' : 'light';
+  // Agents get live inbox updates (and the unread count) on every page while signed in.
+  this.inbox.appName = k => this.state.appName(k);
+  effect(() => { if (this.state.can('chat.read')) this.inbox.start(); });
   // A custom element has no bootstrap component, so start routing explicitly.
   this.router.initialNavigation();
   // After in-app navigation, move focus to the new page's heading so screen readers announce it (2.4.3).

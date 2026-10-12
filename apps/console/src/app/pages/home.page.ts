@@ -140,7 +140,7 @@ function connectMessage(result: string | null, app: string) {
         <li>
          <span class="feed-dot" [attr.data-kind]="e.kind" aria-hidden="true"></span>
          <div class="grow">
-          <a class="feed-title" [routerLink]="['/', e.itemType === 'ticket' ? 'tickets' : 'conversations', e.appKey, e.itemId]">{{ e.title }}</a>
+          <a class="feed-title" [routerLink]="['/', e.itemType === 'ticket' ? 'tickets' : 'inbox', e.appKey, e.itemId]">{{ e.title }}</a>
           <p class="feed-meta mono">{{ activityLabel(e.kind) }} · {{ state.appName(e.appKey) }}@if (e.actorName) { · {{ e.actorName }} } · <time [attr.datetime]="e.at" [attr.title]="fullTime(e.at)">{{ relativeTime(e.at) }}</time></p>
          </div>
         </li>

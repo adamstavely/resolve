@@ -1,7 +1,7 @@
 # Resolve
 
 Resolve is the internal control tower for the organization's Quackback fleet.
-Status: **phases 0–1 done against mocks; phase 2 fleet read (dashboard, tickets, conversations) working against mocks.** The repository contains
+Status: **phases 0–3 working against mocks: identity and connections, fleet read, and operator actions with the live inbox.** The repository contains
 the stack foundation (Angular console with shadcn controls as Web Components, Next.js API on Node.js,
 PostgreSQL), the v1 contract specification, OIDC sign-in, per-app OAuth grants, directory revocation and audit.
 There are no real Quackback tenant integrations, infrastructure or deployment yet; see the phase exit criteria in the delivery plan.
@@ -29,8 +29,9 @@ whose groups map to bundles through `RESOLVE_GROUP_BUNDLES`: Ada Admin, Sam Agen
 Bea Broadcaster, a user with no groups, and "Sam Duplicate", who has the same email as Sam but a different subject.
 The real IdP will be an OIDC/SAML 2.0 provider; Resolve signs in with OIDC (authorization code + PKCE).
 Under **Applications**, connect to the mock Payroll, HR and Legal Ops tenants (`tools/mock-tenant`); they sign you in
-through the IdP session without a second prompt. Home then shows KPIs and activity, and **Tickets** and
-**Conversations** list each app's data (Legal Ops is idle until you load it). To simulate a directory change:
+through the IdP session without a second prompt. Home then shows KPIs and activity; **Inbox** is the live chat queue and **Tickets** lists each app's tickets
+(Legal Ops is idle until you load it). To simulate a customer writing in:
+`curl -X POST -d '{"text":"Hello"}' http://127.0.0.1:3301/dev/customer-message`. To simulate a directory change:
 `curl -X POST -H "Authorization: Bearer $DIRECTORY_TOKEN" -d '{"active":false}' http://127.0.0.1:3200/dev/users/mock%7Cbea/active`.
 
 ```sh
@@ -41,7 +42,7 @@ QUACKBACK_SRC=../quackback npm run test:contract   # tool inventory vs. the pinn
 ```
 
 Evidence: [component gate](docs/evidence/phase-0-component-gate.md),
-[contracts and tool inventory](docs/evidence/phase-0-contracts.md), [identity and connections](docs/evidence/phase-1-identity.md), [fleet read](docs/evidence/phase-2-fleet-read.md).
+[contracts and tool inventory](docs/evidence/phase-0-contracts.md), [identity and connections](docs/evidence/phase-1-identity.md), [fleet read](docs/evidence/phase-2-fleet-read.md), [operator actions](docs/evidence/phase-3-operator-actions.md).
 
 `/api/readiness` reports ready only when the API has `DATABASE_URL` and the latest migration is applied.
 

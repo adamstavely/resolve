@@ -238,3 +238,39 @@ test('ticket reply, assignment and confirmed resolution', async ({ browser }) =>
  expect((await new AxeBuilder({ page: ada }).withTags(tags).analyze()).violations).toEqual([]);
  await ada.context().close();
 });
+
+test('the Inbox nav item counts unread conversations and updates live on any page', async ({ browser }) => {
+ const sam = await signedIn(browser, 'Sam Agent', ['payroll']);
+ const inboxLink = sam.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: /^Inbox/ });
+ await expect(inboxLink).toHaveAccessibleName(/unread/);
+ const count = async () => Number((await inboxLink.locator('.nav-count').textContent())?.replace('+', ''));
+ const before = await count();
+ // Navigate within the app (no reload): the count keeps updating on other pages.
+ await sam.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Tickets' }).click();
+ await expect(sam.getByRole('heading', { level: 1, name: 'Tickets' })).toBeVisible();
+ const { conversationId } = await customerWrites('payroll', 'Badge check');
+ await expect.poll(count).toBe(before + 1);
+ // Marking read for the team lowers it again.
+ await sam.request.post(`/api/apps/payroll/conversations/${conversationId}/read`, { headers: { Origin: ORIGIN, 'Content-Type': 'application/json' }, data: '{}' });
+ await expect.poll(count).toBe(before);
+ await sam.context().close();
+});
+
+test('conversations are part of the inbox: old links redirect and deep links open the conversation', async ({ browser }) => {
+ const sam = await signedIn(browser, 'Sam Agent', ['payroll']);
+ const { conversationId, subject } = await customerWrites('payroll', 'Deep link');
+ await sam.goto('/conversations');
+ await expect(sam).toHaveURL(/\/inbox$/);
+ await sam.goto(`/conversations/payroll/${conversationId}`);
+ await expect(sam).toHaveURL(new RegExp(`/inbox/payroll/${conversationId}$`));
+ await expect(sam.getByRole('heading', { level: 2, name: subject })).toBeVisible();
+ await sam.getByLabel('Status').selectOption('all');
+ await expect(queueItem(sam, subject)).toBeVisible();
+ const nav = sam.getByRole('navigation', { name: 'Primary' });
+ await expect(nav.getByRole('link', { name: 'Conversations' })).toHaveCount(0);
+ await expect(nav.getByRole('link', { name: 'Component check' })).toHaveCount(0);
+ await expect(nav.getByText('Development')).toHaveCount(0);
+ await expect(nav.getByRole('link', { name: 'Home' })).toHaveCount(0);
+ await expect(sam.getByRole('link', { name: 'Resolve home' })).toHaveAttribute('href', '/');
+ await sam.context().close();
+});
