@@ -25,6 +25,7 @@
   - Unread follows Quackback's shared support-team watermark. There is no per-SRE unread state (QB-CHAT-7 closed).
   - Admins register applications, provision instances and activate them. One admin may hold all three (plan 07, decision 3).
   - Dashboard KPI aggregates require `analytics.view` in addition to the per-entity permissions (plan 11).
+  - The console uses one fixed density (the prototype's balanced scale); density is not a user setting.
   - The IdP will support both OAuth 2.0/OpenID Connect and SAML 2.0. Until the product is chosen, development uses a mock IdP.
 
 - Initial-release operator workflows are limited to chats and tickets. Feedback, roadmap and changelog views/actions are excluded, including feedback triage/merge and changelog publishing.

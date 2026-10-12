@@ -15,15 +15,12 @@ test('backend contract, self-hosted fonts and no external requests', async ({ pa
  expect(external).toEqual([]);
 });
 
-test('axe across themes and densities, with 320px reflow', async ({ page }) => {
+test('axe in both themes, with 320px reflow', async ({ page }) => {
  await page.goto('/');
  await expect(page.getByLabel('Application name')).toBeVisible();
  for (const theme of ['light', 'dark']) {
   if (theme === 'dark') await page.getByRole('button', { name: 'Dark appearance' }).click();
-  for (const density of ['compact', 'balanced', 'spacious']) {
-   await page.getByLabel('Density').selectOption(density);
-   expect((await axe(page)).violations, `${theme}/${density}`).toEqual([]);
-  }
+  expect((await axe(page)).violations, theme).toEqual([]);
  }
  await page.setViewportSize({ width: 320, height: 800 });
  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

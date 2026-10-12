@@ -75,7 +75,7 @@ including authentication, dialogs, errors and API-backed action flows. Create a 
 matrix with applicability, test procedure, result and owner; no blanket pass based on a component library.
 
 Automate semantic/contrast checks and keyboard regressions; manually test keyboard-only operation,
-screen readers, zoom/reflow, text spacing, light/dark themes, all density modes and error recovery.
+screen readers, zoom/reflow, text spacing, light/dark themes and error recovery. Density is fixed at the prototype's balanced scale (owner decision 2026-10-12).
 Explicitly cover focus visibility/obscuration, non-drag alternatives, target size, accessible authentication,
 status announcements and confirmation/error handling. Use 320 CSS-pixel reflow and 200% text-resize checks;
 verify relevant exceptions rather than treating responsive screenshots as a conformance audit.

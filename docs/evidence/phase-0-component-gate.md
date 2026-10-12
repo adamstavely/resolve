@@ -45,7 +45,7 @@ Commands: `npm test` (unit), `npm run test:e2e` (Playwright + axe-core 4.13, tag
 |---|---|
 | Token contrast, both themes (1.4.3, 1.4.11) | `tests/design-tokens.unit.test.ts` (58 pairs) |
 | No remote font/resource loads; Geist self-hosted | `foundation.spec.ts` › backend contract, self-hosted fonts and no external requests |
-| axe in light/dark × compact/balanced/spacious; 320px reflow | `foundation.spec.ts` › axe across themes and densities |
+| axe in light and dark (fixed balanced density); 320px reflow | `foundation.spec.ts` › axe in both themes |
 | Text spacing (1.4.12) at 320px | `foundation.spec.ts` › text spacing override |
 | Labels/errors linked across element boundary; first-invalid focus | `components.spec.ts` › submitting an empty form… |
 | Keyboard-only combobox; portal (popover) axe; native form value | `components.spec.ts` › keyboard-only completion… |

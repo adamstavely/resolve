@@ -3,8 +3,6 @@ import { appsResponseSchema, auditPageSchema, BUNDLE_LABELS, type AuditEvent, CA
 import { RESOLVE_ELEMENTS } from './elements';
 import { IconComponent, MarkComponent } from './icon.component';
 
-type Density = 'compact' | 'balanced' | 'spacious';
-
 /** Saved preference, else the operating system's. */
 function initialTheme(): 'light' | 'dark' {
  try { const saved = localStorage.getItem('resolve-theme'); if (saved === 'light' || saved === 'dark') return saved; } catch { /* ignore */ }
@@ -56,12 +54,6 @@ const SIGNIN_MESSAGES: Record<string, { text: string; alert: boolean }> = {
   </a>
   <div class="topbar-spacer"></div>
   <div class="topbar-actions">
-   <label class="density" for="density"><span class="sr-only">Density</span>
-    <rs-icon name="sliders" [size]="16" />
-    <select id="density" [value]="density()" (change)="setDensity($any($event.target).value)">
-     <option value="compact">Compact</option><option value="balanced">Balanced</option><option value="spacious">Spacious</option>
-    </select>
-   </label>
    <button class="icon-btn" type="button" (click)="toggleTheme()" [attr.aria-pressed]="dark()" aria-label="Dark appearance">
     <rs-icon [name]="dark() ? 'sun' : 'moon'" [size]="18" />
    </button>
@@ -256,7 +248,6 @@ const SIGNIN_MESSAGES: Record<string, { text: string; alert: boolean }> = {
 })
 export class ConsoleComponent {
  readonly dark = signal(initialTheme() === 'dark');
- readonly density = signal<Density>('balanced');
  readonly health = signal('Checking backend…');
  readonly healthy = signal(false);
  readonly session = signal<SessionResponse | undefined>(undefined);
@@ -365,7 +356,6 @@ export class ConsoleComponent {
   document.documentElement.dataset['theme'] = this.dark() ? 'dark' : 'light';
   try { localStorage.setItem('resolve-theme', this.dark() ? 'dark' : 'light'); } catch { /* storage may be unavailable */ }
  }
- setDensity(value: Density) { this.density.set(value); document.documentElement.dataset['density'] = value; }
 
  submit(event: SubmitEvent) {
   event.preventDefault();
