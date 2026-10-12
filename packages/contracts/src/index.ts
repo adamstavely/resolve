@@ -15,3 +15,4 @@ export * from './outcomes';
 export * from './fleet';
 export * from './broadcasts';
 export * from './session';
+export * from './admin';

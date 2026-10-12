@@ -71,6 +71,25 @@ the 15-minute target. Each run and each observation (applied, stale, unchanged, 
 - **Complete snapshots:** absence from a complete snapshot disables the user; a partial snapshot proves nothing.
 - **Manual denial:** a manual (emergency) denial is independent of the directory and is never lifted by it.
 
+## Admin API (fleet-admin only)
+
+Phase 1 needs these primitives to be usable; the management screens remain Phase 4.
+
+| Endpoint | Capability | Behaviour |
+|---|---|---|
+| `GET /api/admin/users?q=` | `users.manage` | Find people by name or email (display data); shows enabled state, block reason, bundles and last sign-in |
+| `POST /api/admin/users/:id/access` `{enabled, reason}` | `users.manage` | Emergency block revokes sessions and app grants at once; lifting removes only a manual block (directory-disabled → 409); self-block refused (409) |
+| `PUT /api/admin/apps/:appKey/client` `{clientId, clientSecret}` | `app.register` | Registers or rotates Resolve's OAuth client for a registered app; secret sealed on receipt, never returned or audited; cached discovery dropped |
+| `GET /api/audit?category=&outcome=&limit=&before=` | `audit.read` | Newest first, filters by category (session, grant, user) and outcome, keyset paging over (time, id) at microsecond precision |
+
+JSON mutations require the exact Origin and `Content-Type: application/json` (a cross-site form cannot send it
+without a preflight). Every access change is audited with the acting admin and reason in the same transaction.
+The console shows a read-only Audit panel to holders of `audit.read`.
+
+Evidence: `tests/database/admin.db.test.ts` (block/lift rules, revocation, audit content, paging with identical
+timestamps, wildcard-safe search) and `tests/browser/admin.spec.ts` (403 for non-admins, live session killed by a
+block, sign-in refused while blocked, validation/CSRF, secret never returned or audited, audit panel axe).
+
 ## Phase 1 exit criteria (plan 00)
 
 | Criterion | State |
@@ -99,5 +118,5 @@ the 15-minute target. Each run and each observation (applied, stale, unchanged, 
 - Directory: delta/SCIM semantics, group changes (bundles refresh only at sign-in), the optional lease, and alarms on stale runs.
 - Desired-state propagation of denials into tenants (plan 02 versioned jobs). Today revocation is Resolve-side only.
 - Revoking tokens at the tenant on disconnect or disable (the mock has no revocation endpoint). KMS-backed sealer for shared environments.
-- Admin UI for users, manual grants, group mapping and tenant client registration (onboarding, plan 07).
+- Management screens for people, manual bundle grants and group mapping (Phase 4). Client registration moves into onboarding (plan 07).
 - Local development puts every mock on 127.0.0.1, and cookies are not isolated by port. Real deployments use separate hostnames.

@@ -20,3 +20,4 @@ header .row {flex-wrap:wrap;}
 .table-wrap {overflow-x:auto;} table {border-collapse:collapse;width:100%;} th,td {text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:middle;}
 td.actions {display:flex;gap:8px;flex-wrap:wrap;} td.actions form {margin:0;}
 .sr-only {position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+.filters {margin-bottom:12px;} .mono {font-family:'Geist Mono',ui-monospace,monospace;font-size:var(--fs-sm);overflow-wrap:anywhere;}

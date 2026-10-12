@@ -24,9 +24,11 @@ const clients: Client[] = [
  { id: required('OIDC_CLIENT_ID'), secret: required('OIDC_CLIENT_SECRET'), redirectUris: [`${new URL(required('RESOLVE_ORIGIN')).origin}/api/auth/callback`] },
  ...tenants.map(t => ({ id: t.idpClient.id, secret: t.idpClient.secret, redirectUris: [`http://127.0.0.1:${t.port}/api/auth/idp/callback`] })),
 ];
+// Versions are time-based so they keep increasing across restarts, like a real directory's change sequence.
+let directoryVersion = Date.now();
+const nextVersion = () => (directoryVersion = Math.max(directoryVersion + 1, Date.now()));
 const users: User[] = (JSON.parse(readFileSync(new URL('./users.json', import.meta.url), 'utf8')) as Omit<User, 'active' | 'version'>[])
- .map(u => ({ ...u, active: true, version: 1 }));
-let directoryVersion = users.length;
+ .map(u => ({ ...u, active: true, version: nextVersion() }));
 
 const { privateKey, publicKey } = await generateKeyPair('RS256');
 const kid = randomBytes(8).toString('hex');
@@ -139,7 +141,7 @@ async function setActive(req: IncomingMessage, res: ServerResponse, sub: string)
  const user = users.find(u => u.sub === sub);
  if (!user) return send(res, 404, { error: 'not_found' });
  user.active = Boolean(JSON.parse(await body(req)).active);
- user.version = ++directoryVersion;
+ user.version = nextVersion();
  if (!user.active) for (const [k, v] of sessions) if (v === sub) sessions.delete(k);
  send(res, 200, { sub, active: user.active, version: user.version });
 }

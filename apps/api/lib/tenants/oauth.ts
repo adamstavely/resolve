@@ -25,6 +25,11 @@ export async function tenantOidc(app: RegistryApp): Promise<client.Configuration
  return p;
 }
 
+/** Drop cached discovery/credentials after a client registration or rotation. */
+export function forgetTenantOidc(appKey: string) {
+ for (const key of discovered.keys()) if (key.startsWith(appKey + '|')) discovered.delete(key);
+}
+
 export const connectRedirectUri = () => `${config().RESOLVE_ORIGIN}/api/connect/callback`;
 
 /**

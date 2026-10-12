@@ -1,8 +1,14 @@
 import { Component, CUSTOM_ELEMENTS_SCHEMA, computed, signal } from '@angular/core';
-import { appsResponseSchema, BUNDLE_LABELS, CAPABILITIES, healthSchema, sessionResponseSchema, whoamiResponseSchema, type AppsResponse, type SessionResponse } from '../../../../packages/contracts/src/index';
+import { appsResponseSchema, auditPageSchema, BUNDLE_LABELS, type AuditEvent, CAPABILITIES, healthSchema, sessionResponseSchema, whoamiResponseSchema, type AppsResponse, type SessionResponse } from '../../../../packages/contracts/src/index';
 import { RESOLVE_ELEMENTS } from './elements';
 
 type Density = 'compact' | 'balanced' | 'spacious';
+
+const ACTION_LABELS: Record<string, string> = {
+ 'session.login': 'Signed in', 'session.logout': 'Signed out', 'grant.connect': 'Connected an app', 'grant.disconnect': 'Disconnected an app',
+ 'user.manual_disable': 'Blocked access', 'user.manual_enable': 'Lifted an access block', 'user.directory_disable': 'Disabled by directory',
+ 'user.directory_enable': 'Re-enabled by directory', 'app.client_register': 'Registered an app client',
+};
 
 const CONNECTION_LABELS: Record<string, string> = {
  not_connected: 'Not connected', connecting: 'Connecting', connected: 'Connected', reconnect_required: 'Reconnect required',
@@ -112,6 +118,44 @@ const SIGNIN_MESSAGES: Record<string, { text: string; alert: boolean }> = {
    </section>
   }
 
+  @if (canReadAudit()) {
+   <section class="panel" aria-labelledby="audit-title">
+    <h2 id="audit-title">Audit</h2>
+    <p class="muted">Sign-ins, app connections and access changes, newest first. Read-only.</p>
+    <div class="row filters">
+     <label class="row" for="audit-category">Activity
+      <select id="audit-category" [value]="auditCategory()" (change)="setAuditFilter('category', $any($event.target).value)">
+       <option value="">All</option><option value="session">Sign-in</option><option value="grant">App connections</option><option value="user">Access changes</option>
+      </select>
+     </label>
+     <label class="row" for="audit-outcome">Outcome
+      <select id="audit-outcome" [value]="auditOutcome()" (change)="setAuditFilter('outcome', $any($event.target).value)">
+       <option value="">All</option><option value="succeeded">Succeeded</option><option value="failed">Failed</option><option value="denied">Denied</option>
+      </select>
+     </label>
+    </div>
+    <div class="table-wrap"><table>
+     <caption class="sr-only">Audit events</caption>
+     <thead><tr><th scope="col">When</th><th scope="col">Who</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Details</th></tr></thead>
+     <tbody>
+      @for (e of auditEvents(); track e.id) {
+       <tr>
+        <td><time [attr.datetime]="e.at">{{ formatTime(e.at) }}</time></td>
+        <td>{{ e.actor }}@if (e.actorType === 'system') { <span class="muted"> (system)</span> }</td>
+        <td>{{ actionLabel(e.operation) }}</td>
+        <td>{{ e.outcome }}</td>
+        <td class="mono">{{ details(e) }}</td>
+       </tr>
+      } @empty {
+       <tr><td colspan="5">{{ auditLoading() ? 'Loading…' : 'No matching events.' }}</td></tr>
+      }
+     </tbody>
+    </table></div>
+    @if (auditCursor()) { <button class="btn" type="button" (click)="loadAudit(true)" [disabled]="auditLoading()">Load older events</button> }
+    <p role="status" class="sr-only">{{ auditStatus() }}</p>
+   </section>
+  }
+
   <section class="panel" aria-labelledby="check-title">
    <h2 id="check-title">Component check</h2>
    <p class="muted">Angular owns this native form; each field is a form-associated Web Component. Submitting only reads the values in your browser.</p>
@@ -144,6 +188,13 @@ export class ConsoleComponent {
  readonly session = signal<SessionResponse | undefined>(undefined);
  readonly roleLabels = computed(() => { const s = this.session(); return s?.authenticated ? s.bundles.map(b => BUNDLE_LABELS[b]).join(', ') : ''; });
  readonly apps = signal<AppsResponse | undefined>(undefined);
+ readonly auditEvents = signal<AuditEvent[]>([]);
+ readonly auditCursor = signal<string | null>(null);
+ readonly auditLoading = signal(false);
+ readonly auditStatus = signal('');
+ readonly auditCategory = signal('');
+ readonly auditOutcome = signal('');
+ readonly canReadAudit = computed(() => { const s = this.session(); return !!s?.authenticated && s.capabilities.includes('audit.read'); });
  readonly connectionCheck = signal('');
  readonly canConnect = computed(() => { const s = this.session(); return !!s?.authenticated && s.capabilities.includes('connection.manage'); });
  private readonly query = new URLSearchParams(location.search);
@@ -171,10 +222,39 @@ export class ConsoleComponent {
     const s = sessionResponseSchema.parse(await r.json());
     this.session.set(s);
     if (s.authenticated && s.capabilities.includes('fleet.view')) this.loadApps();
+    if (s.authenticated && s.capabilities.includes('audit.read')) this.loadAudit(false);
    })
    .catch(() => this.session.set({ authenticated: false }));
   // Drop the one-time sign-in result from the address bar so a reload does not repeat it.
   if (this.signinMessage()) history.replaceState(null, '', location.pathname);
+ }
+
+ setAuditFilter(which: 'category' | 'outcome', value: string) {
+  (which === 'category' ? this.auditCategory : this.auditOutcome).set(value);
+  this.loadAudit(false);
+ }
+
+ loadAudit(older: boolean) {
+  const q = new URLSearchParams({ limit: '25' });
+  if (this.auditCategory()) q.set('category', this.auditCategory());
+  if (this.auditOutcome()) q.set('outcome', this.auditOutcome());
+  if (older && this.auditCursor()) q.set('before', this.auditCursor()!);
+  this.auditLoading.set(true);
+  fetch('/api/audit?' + q, { credentials: 'same-origin' })
+   .then(async r => { if (!r.ok) throw Error(); return auditPageSchema.parse(await r.json()); })
+   .then(page => {
+    this.auditEvents.update(prev => older ? [...prev, ...page.events] : page.events);
+    this.auditCursor.set(page.nextCursor);
+    this.auditStatus.set(`${this.auditEvents().length} audit events shown.`);
+   })
+   .catch(() => this.auditStatus.set('Audit events could not be loaded.'))
+   .finally(() => this.auditLoading.set(false));
+ }
+
+ formatTime(iso: string) { return new Date(iso).toLocaleString(); }
+ actionLabel(op: string) { return ACTION_LABELS[op] ?? op; }
+ details(e: AuditEvent) {
+  return Object.entries(e.summary).filter(([k]) => !['executor', 'userId', 'targetUserId'].includes(k)).map(([k, v]) => `${k}: ${v}`).join(' · ');
  }
 
  loadApps() {

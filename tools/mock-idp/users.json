@@ -4,5 +4,6 @@
  { "sub": "mock|olive", "name": "Olive Observer", "email": "olive@example.test", "groups": ["resolve-observers"] },
  { "sub": "mock|bea", "name": "Bea Broadcaster", "email": "bea@example.test", "groups": ["resolve-announcements"] },
  { "sub": "mock|nina", "name": "Nina No Groups", "email": "nina@example.test", "groups": [] },
+ { "sub": "mock|bo", "name": "Bo Blockable", "email": "bo@example.test", "groups": ["resolve-agents"] },
  { "sub": "mock|sam-imposter", "name": "Sam Duplicate", "email": "sam@example.test", "groups": ["resolve-admins"] }
 ]

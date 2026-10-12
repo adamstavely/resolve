@@ -1,12 +1,20 @@
+import type { NextRequest } from 'next/server';
+import { auditQuerySchema } from '@resolve/contracts';
+import { auditPage, decodeCursor } from '../../../lib/admin';
 import { pool } from '../../../lib/db';
-import { recentAudit } from '../../../lib/auth/repository';
+import { json, problem } from '../../../lib/http';
 import { requireCapability } from '../../../lib/auth/session';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: Request) {
+/** Newest-first audit with category/outcome filters and keyset paging. */
+export async function GET(request: NextRequest) {
  const principal = await requireCapability(request, 'audit.read');
  if (principal instanceof Response) return principal;
- return Response.json({ events: await recentAudit(pool()) }, { headers: { 'Cache-Control': 'no-store' } });
+ const q = auditQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams));
+ if (!q.success) return problem(400, 'INVALID_QUERY', q.error.issues[0]?.message ?? 'Invalid query.');
+ const before = q.data.before ? decodeCursor(q.data.before) : undefined;
+ if (q.data.before && !before) return problem(400, 'INVALID_CURSOR', 'The paging cursor is not valid.');
+ return json(await auditPage(pool(), { category: q.data.category, outcome: q.data.outcome, limit: q.data.limit, before }));
 }

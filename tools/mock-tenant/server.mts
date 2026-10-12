@@ -25,7 +25,8 @@ const fleet: { registryPort: number; tenants: TenantConfig[] } = JSON.parse(read
 const idp = new URL(required('OIDC_ISSUER')).origin;
 const resolveRedirect = `${new URL(required('RESOLVE_ORIGIN')).origin}/api/connect/callback`;
 const registryToken = required('REGISTRY_TOKEN');
-const idpKeys = createRemoteJWKSet(new URL(`${idp}/jwks`));
+// No refetch cooldown: the dev IdP generates new keys on every restart.
+const idpKeys = createRemoteJWKSet(new URL(`${idp}/jwks`), { cooldownDuration: 0 });
 /** Scopes the tenant will grant to Resolve (the fork's vocabulary plus OIDC). */
 const SUPPORTED_SCOPES = ['openid', 'offline_access', 'read:feedback', 'write:feedback', 'write:changelog', 'read:article', 'write:article', 'read:chat', 'write:chat', 'read:settings', 'write:settings'];
 const ACCESS_SECONDS = 300;

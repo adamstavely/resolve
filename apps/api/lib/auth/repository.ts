@@ -111,10 +111,3 @@ export async function audit(db: Queryable, e: { actorUserId: string | null; oper
  await db.query('INSERT INTO audit_events (operation_id, actor_user_id, operation, outcome, summary) VALUES ($1, $2, $3, $4, $5)',
   [randomUUID(), e.actorUserId, e.operation, e.outcome, JSON.stringify(e.summary ?? {})]);
 }
-
-export async function recentAudit(db: Queryable, limit = 50) {
- const r = await db.query(
-  `SELECT a.at, a.operation, a.outcome, a.summary, u.display_name AS actor
-   FROM audit_events a LEFT JOIN users u ON u.id = a.actor_user_id ORDER BY a.at DESC LIMIT $1`, [limit]);
- return r.rows.map(row => ({ at: (row.at as Date).toISOString(), operation: row.operation, outcome: row.outcome, actor: row.actor, summary: row.summary }));
-}
