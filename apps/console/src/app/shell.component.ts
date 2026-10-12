@@ -89,10 +89,18 @@ function initialTheme(): 'light' | 'dark' {
      }
     </ul>
    }
-   @if (state.can('audit.read')) {
+   @if (state.can('audit.read') || state.can('app.register') || state.can('roles.manage') || state.can('users.manage')) {
     <div class="sidenav-label" id="nav-admin">Administration</div>
     <ul class="nav-list" aria-labelledby="nav-admin">
-     <li><a class="tab" routerLink="/audit" routerLinkActive="active" ariaCurrentWhenActive="page"><span class="nav-ic"><rs-icon name="doc" [size]="17" /></span><span class="tab-name">Audit</span></a></li>
+     @if (state.can('app.register')) {
+      <li><a class="tab" routerLink="/applications" routerLinkActive="active" ariaCurrentWhenActive="page"><span class="nav-ic"><rs-icon name="grid" [size]="17" /></span><span class="tab-name">Applications</span></a></li>
+     }
+     @if (state.can('roles.manage') || state.can('users.manage')) {
+      <li><a class="tab" routerLink="/people" routerLinkActive="active" ariaCurrentWhenActive="page"><span class="nav-ic"><rs-icon name="users" [size]="17" /></span><span class="tab-name">People and roles</span></a></li>
+     }
+     @if (state.can('audit.read')) {
+      <li><a class="tab" routerLink="/audit" routerLinkActive="active" ariaCurrentWhenActive="page"><span class="nav-ic"><rs-icon name="doc" [size]="17" /></span><span class="tab-name">Audit</span></a></li>
+     }
     </ul>
    }
    <div class="sidenav-footer"><span class="status-dot" [attr.data-tone]="state.healthy() ? 'safe' : 'destructive'" aria-hidden="true"></span><p role="status">{{ state.health() }}</p></div>

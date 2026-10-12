@@ -18,3 +18,4 @@ export * from './fleet-read';
 export * from './operations';
 export * from './session';
 export * from './admin';
+export * from './onboarding';

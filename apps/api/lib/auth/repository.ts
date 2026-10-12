@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import type { BundleId } from '@resolve/contracts';
 import { transaction, type Queryable } from '../db';
+import { recomputeUser } from '../fleet-admin/entitlements';
 import { writeAudit } from '../audit';
 
 /*
@@ -41,6 +42,13 @@ export type SignInResult = { status: 'ok'; userId: string; identityId: string } 
  * Claim-sourced bundles are replaced; manually granted bundles are untouched.
  */
 export async function signIn(db: Pick<Pool, 'connect'>, c: SignInClaims): Promise<SignInResult> {
+ const result = await signInTx(db, c);
+ // Bundles come from the IdP at each sign-in; recompute what that means in every mapped app (plan 02).
+ if (result.status === 'ok') await recomputeUser(db, result.userId);
+ return result;
+}
+
+async function signInTx(db: Pick<Pool, 'connect'>, c: SignInClaims): Promise<SignInResult> {
  return transaction(db, async tx => {
   await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [c.issuer + '\n' + c.subject]);
   let row = (await tx.query(
@@ -70,10 +78,6 @@ export async function createSession(db: Queryable, s: { idHash: string; userId: 
 export interface SessionUser { userId: string; displayName: string; email: string | null; bundles: string[]; identity: { id: string; issuer: string; subject: string } }
 
 /**
- * The signed-in user for a session, or undefined when the session is unknown, revoked, past its absolute
- * or idle limit, or the user is disabled. Checked on every request; extends the idle window.
- */
-/**
  * Live-stream revocation check: is the session still valid (not revoked, expired or idle, user still enabled)?
  * Read-only, so it can run before every stream poll; `touch` records activity (at most once a minute) so an
  * open live inbox keeps the session alive without writing a row on every poll.
@@ -86,6 +90,10 @@ export async function sessionStillValid(db: Queryable, idHash: string, idleMinut
  return (r.rowCount ?? 0) > 0;
 }
 
+/**
+ * The signed-in user for a session, or undefined when the session is unknown, revoked, past its absolute
+ * or idle limit, or the user is disabled. Checked on every request; extends the idle window.
+ */
 export async function findSession(db: Queryable, idHash: string, idleMinutes: number): Promise<SessionUser | undefined> {
  const r = await db.query(
   `UPDATE sessions s SET last_seen_at = now()

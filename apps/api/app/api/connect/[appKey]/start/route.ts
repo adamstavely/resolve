@@ -1,11 +1,10 @@
 import type { NextRequest } from 'next/server';
 import * as client from 'openid-client';
-import { isServable } from '@resolve/contracts';
 import { pool } from '../../../../../lib/db';
 import { audit } from '../../../../../lib/auth/repository';
 import { sha256 } from '../../../../../lib/auth/policy';
 import { requireCapability } from '../../../../../lib/auth/session';
-import { registryApp } from '../../../../../lib/registry';
+import { connectableApp } from '../../../../../lib/fleet-admin/pilot-access';
 import { createConnectAttempt } from '../../../../../lib/tenants/grants';
 import { connectRedirectUri, tenantOidc, tenantScopes } from '../../../../../lib/tenants/oauth';
 
@@ -19,9 +18,10 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ appKey:
  const { appKey } = await ctx.params;
  const principal = await requireCapability(request, 'connection.manage');
  if (principal instanceof Response) return principal;
- const app = await registryApp(appKey).catch(() => undefined);
- await audit(pool(), { actorUserId: principal.userId, operation: 'grant.connect_start', outcome: app && isServable(app) ? 'succeeded' : 'failed', summary: { app: appKey } });
- if (!app || !isServable(app)) return back('unavailable', appKey);
+ const target = await connectableApp(principal.userId, appKey);
+ await audit(pool(), { actorUserId: principal.userId, operation: 'grant.connect_start', outcome: target ? 'succeeded' : 'failed', summary: { app: appKey, pilot: target?.pilot ?? false } });
+ if (!target) return back('unavailable', appKey);
+ const app = target.app;
  let cfg: client.Configuration;
  try { cfg = await tenantOidc(app); } catch {
   await audit(pool(), { actorUserId: principal.userId, operation: 'grant.connect', outcome: 'failed', summary: { app: appKey, reason: 'tenant_unreachable' } });

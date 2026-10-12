@@ -24,11 +24,11 @@ export async function POST(request: Request, ctx: Ctx) {
  const activity = body.success ? body.data.activity : 'viewing';
  const held = (await currentPrincipal(request))?.capabilities ?? [];
  const capability = activity === 'typing' || !held.includes('chat.note') ? 'chat.reply' : 'chat.note';
- const r = await appRequest(request, capability, appKey, 'conversation.activity');
+ const r = await appRequest(request, capability, appKey, 'presence.activity');
  if (r instanceof Response) return r;
  if (!body.success) return problem(400, 'INVALID_REQUEST', 'Unknown activity.');
  const audit = (outcome: 'succeeded' | 'failed' | 'denied', code?: string) =>
-  writeAudit(pool(), { actorUserId: r.principal.userId, operation: 'conversation.activity', outcome, summary: { app: appKey, target: conversationId, activity, ...(code ? { code } : {}) } });
+  writeAudit(pool(), { actorUserId: r.principal.userId, operation: 'presence.activity', outcome, summary: { app: appKey, target: conversationId, activity, ...(code ? { code } : {}) } });
  if (!(await actionSupported(r.app, 'signal_activity'))) { await audit('failed', 'ACTION_UNAVAILABLE'); return problem(409, 'ACTION_UNAVAILABLE', 'This application does not share typing or viewing yet.'); }
  const o = await rpc(r.app, r.principal.userId, 'signal_activity', { conversationId, activity }, 3000);
  if (o.kind === 'ok') { await audit('succeeded'); return json({ expiresAt: o.data.expiresAt }); }

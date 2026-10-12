@@ -33,6 +33,9 @@ through the IdP session without a second prompt. Home then shows KPIs and activi
 (Legal Ops is idle until you load it). To simulate a customer writing in:
 `curl -X POST -d '{"text":"Hello"}' http://127.0.0.1:3301/dev/customer-message`. To simulate a directory change:
 `curl -X POST -H "Authorization: Bearer $DIRECTORY_TOKEN" -d '{"active":false}' http://127.0.0.1:3200/dev/users/mock%7Cbea/active`.
+As Ada (admin), **Administration → Applications → Register application** onboards a new instance (or adopts the unbound
+Travel Desk) through the mock fleet worker; **People and roles** manages bundles. `npm run dev` also starts the fleet job
+dispatcher (`npm run dev:jobs`). Stream load test: `npm run load:stream -- --sessions 100` (see phase 3 evidence).
 
 ```sh
 npm run check              # typecheck, console build and unit tests
@@ -42,7 +45,8 @@ QUACKBACK_SRC=../quackback npm run test:contract   # tool inventory vs. the pinn
 ```
 
 Evidence: [component gate](docs/evidence/phase-0-component-gate.md),
-[contracts and tool inventory](docs/evidence/phase-0-contracts.md), [identity and connections](docs/evidence/phase-1-identity.md), [fleet read](docs/evidence/phase-2-fleet-read.md), [operator actions](docs/evidence/phase-3-operator-actions.md).
+[contracts and tool inventory](docs/evidence/phase-0-contracts.md), [identity and connections](docs/evidence/phase-1-identity.md), [fleet read](docs/evidence/phase-2-fleet-read.md), [operator actions](docs/evidence/phase-3-operator-actions.md),
+[fleet administration](docs/evidence/phase-4-fleet-administration.md).
 
 `/api/readiness` reports ready only when the API has `DATABASE_URL` and the latest migration is applied.
 
@@ -60,6 +64,8 @@ Evidence: [component gate](docs/evidence/phase-0-component-gate.md),
 - [09 — Unified SRE chat inbox](plans/09-unified-chat-inbox.md)
 - [10 — Verified Quackback chat API gaps](plans/10-quackback-chat-api-verification.md)
 - [11 — Dashboard KPI definitions and API verification](plans/11-dashboard-kpi-contract.md)
+- [12 — Elastic Observability integration: first release](plans/12-elastic-observability-integration.md)
+- [13 — ServiceNow incident integration: after first release](plans/13-servicenow-integration.md)
 
 Resolve's repository: https://github.com/adamstavely/resolve
 Quackback fork: https://github.com/adamstavely/quackback

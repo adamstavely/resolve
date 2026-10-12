@@ -3,6 +3,7 @@ import type { AdminUser, AuditEvent } from '@resolve/contracts';
 import { transaction, type Queryable } from './db';
 import { writeAudit } from './audit';
 import { aad, type Sealer } from './crypto';
+import { recomputeUser } from './fleet-admin/entitlements';
 
 /*
  * Phase 1 administration primitives. Every change is audited with the acting admin and their reason, in the
@@ -14,11 +15,12 @@ export async function findUsers(db: Queryable, query: string, limit = 25): Promi
  const rows = (await db.query(
   `SELECT u.id, u.display_name, u.email, u.enabled, u.disabled_reason,
     ARRAY(SELECT DISTINCT bundle FROM role_members m WHERE m.user_id = u.id ORDER BY bundle) AS bundles,
+    ARRAY(SELECT bundle FROM role_members m WHERE m.user_id = u.id AND m.source = 'manual' ORDER BY bundle) AS manual_bundles,
     (SELECT max(last_login_at) FROM identities i WHERE i.user_id = u.id) AS last_login_at
    FROM users u WHERE $1 = '' OR u.display_name ILIKE $2 OR u.email ILIKE $2
    ORDER BY u.display_name, u.id LIMIT $3`, [query, like, limit])).rows;
  return rows.map(r => ({ id: r.id, displayName: r.display_name, email: r.email, enabled: r.enabled, disabledReason: r.disabled_reason,
-  bundles: r.bundles, lastLoginAt: r.last_login_at ? (r.last_login_at as Date).toISOString() : null }));
+  bundles: r.bundles, manualBundles: r.manual_bundles, lastLoginAt: r.last_login_at ? (r.last_login_at as Date).toISOString() : null }));
 }
 
 export type AccessChangeResult = 'changed' | 'unchanged' | 'not_found' | 'self' | 'directory_disabled';
@@ -30,6 +32,13 @@ export type AccessChangeResult = 'changed' | 'unchanged' | 'not_found' | 'self' 
  */
 export async function setManualAccess(db: Pick<Pool, 'connect'>, actorUserId: string, targetUserId: string, enabled: boolean, reason: string): Promise<AccessChangeResult> {
  if (actorUserId === targetUserId) return 'self';
+ const result = await manualAccessTx(db, actorUserId, targetUserId, enabled, reason);
+ // Tenants must deny a blocked person too (desired-state denial, plan 02), not only Resolve.
+ if (result === 'changed') await recomputeUser(db, targetUserId);
+ return result;
+}
+
+async function manualAccessTx(db: Pick<Pool, 'connect'>, actorUserId: string, targetUserId: string, enabled: boolean, reason: string): Promise<AccessChangeResult> {
  return transaction(db, async tx => {
   const row = (await tx.query('SELECT enabled, disabled_reason FROM users WHERE id = $1 FOR UPDATE', [targetUserId])).rows[0];
   if (!row) return 'not_found';

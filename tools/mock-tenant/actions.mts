@@ -13,6 +13,7 @@ interface Upload { id: string; key: string; owner: string; targetType: 'conversa
 interface Presence { name: string; viewingUntil: number; typingUntil: number }
 
 const RETAIN = 1000;
+const RUN = Date.now().toString(36).slice(-5);
 /** The tenant's own attachment policy (it does not trust Resolve's check). */
 const FILE_TYPES: Record<string, string[]> = {
  'image/png': ['png'], 'image/jpeg': ['jpg', 'jpeg'], 'image/gif': ['gif'], 'image/webp': ['webp'], 'application/pdf': ['pdf'],
@@ -299,6 +300,9 @@ export class TenantStore {
   return { events: events.map(e => ({ cursor: String(e.seq), itemType: e.itemType, itemId: e.itemId, kind: e.kind, at: e.at })), cursor: String(this.seq), resync };
  }
 
+ /** Ends every open long poll now (suspension or an access change: callers re-check before polling again). */
+ wakeAll() { for (const w of this.waiters) w(); this.waiters.clear(); }
+
  /** Long-poll helper: resolves when any change is emitted, or after `ms`. */
  waitForChange(ms: number) {
   return new Promise<void>(resolve => { const done = () => { clearTimeout(t); this.waiters.delete(done); resolve(); }; const t = setTimeout(done, ms); this.waiters.add(done); });
@@ -310,7 +314,8 @@ export class TenantStore {
   const now = new Date().toISOString();
   if (!c) {
    const n = this.data.conversations.length + 1;
-   c = { id: `conversation_${this.appKey}_live_${n}`, status: 'open', priority: 'none', channel: 'messenger', subject: text.slice(0, 60), visitorPrincipalId: 'principal_customer_live',
+   // Unique across restarts, so ids from an earlier run (e.g. in Resolve's audit) are never reused.
+   c = { id: `conversation_${this.appKey}_live_${RUN}${n}`, status: 'open', priority: 'none', channel: 'messenger', subject: text.slice(0, 60), visitorPrincipalId: 'principal_customer_live',
     visitorName: 'Morgan Ellis', visitorEmail: 'morgan@example.test', assignedAgentPrincipalId: null, assigneeName: null, teamId: team,
     teamName: team === 'team_billing' ? 'Billing' : 'Support', waitingSince: now, linkedTicketId: null, lastMessageAt: now, resolvedAt: null, createdAt: now,
     messages: [], lastReadAt: null, version: 1 };

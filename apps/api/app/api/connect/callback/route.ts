@@ -1,12 +1,13 @@
 import type { NextRequest } from 'next/server';
 import * as client from 'openid-client';
-import { checkCallbackBinding, checkIdentityMapping, isServable, verifiedTenantIdentitySchema } from '@resolve/contracts';
+import { checkCallbackBinding, checkIdentityMapping, verifiedTenantIdentitySchema } from '@resolve/contracts';
 import { config } from '../../../../lib/config';
 import { pool } from '../../../../lib/db';
 import { sha256 } from '../../../../lib/auth/policy';
 import { audit } from '../../../../lib/auth/repository';
 import { currentPrincipal } from '../../../../lib/auth/session';
-import { registryApp, tenantIssuer } from '../../../../lib/registry';
+import { tenantIssuer } from '../../../../lib/registry';
+import { connectableApp } from '../../../../lib/fleet-admin/pilot-access';
 import { sealer } from '../../../../lib/sealer';
 import { identityLink, storeConnection, takeConnectAttempt } from '../../../../lib/tenants/grants';
 import { tenantOidc } from '../../../../lib/tenants/oauth';
@@ -40,8 +41,8 @@ export async function GET(request: NextRequest) {
  }, { sessionHash: principal.sessionHash, userId: principal.userId, appKey: attempt.appKey, now: new Date() });
  if (!binding.ok) return fail(binding.reason);
 
- const app = await registryApp(attempt.appKey).catch(() => undefined);
- if (!app || !isServable(app)) return fail('app_unavailable', 'unavailable');
+ const app = (await connectableApp(principal.userId, attempt.appKey))?.app;
+ if (!app) return fail('app_unavailable', 'unavailable');
 
  let tokens: Awaited<ReturnType<typeof client.authorizationCodeGrant>>;
  try {

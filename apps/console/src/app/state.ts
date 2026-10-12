@@ -69,3 +69,30 @@ export function relativeTime(iso: string, now = Date.now()) {
 }
 export const fullTime = (iso: string) => new Date(iso).toLocaleString();
 export const fileSize = (n: number) => n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+
+/** Result of a mutation: parsed data on success, or the server's error (with the form field at fault, if any). */
+export interface SendResult<T> { ok: boolean; status: number; data?: T; error?: { code: string; message: string; field?: string; [k: string]: string | undefined } }
+
+/** JSON mutation to the Resolve API (same-origin; the server checks Origin). */
+export async function send<T extends z.ZodType>(method: 'POST' | 'PUT', path: string, body: unknown, schema?: T): Promise<SendResult<z.infer<T>>> {
+ let r: Response;
+ try {
+  r = await fetch(path, { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) });
+ } catch {
+  return { ok: false, status: 0, error: { code: 'NETWORK', message: 'Resolve could not be reached. Try again.' } };
+ }
+ const json = await r.json().catch(() => null);
+ if (!r.ok) return { ok: false, status: r.status, error: json?.error ?? { code: 'ERROR', message: 'The request failed. Try again.' } };
+ if (!schema) return { ok: true, status: r.status, data: json };
+ const parsed = schema.safeParse(json);
+ return parsed.success ? { ok: true, status: r.status, data: parsed.data } : { ok: false, status: r.status, error: { code: 'INVALID_RESPONSE', message: 'Unexpected response from Resolve.' } };
+}
+
+/** Move focus to a form field by name (custom text fields focus their inner input). */
+export function focusField(name: string | undefined) {
+ if (!name) return;
+ setTimeout(() => {
+  const el = document.querySelector<HTMLElement>(`[name="${CSS.escape(name)}"]`);
+  (el?.querySelector<HTMLElement>('input, textarea, select, button') ?? el)?.focus();
+ });
+}

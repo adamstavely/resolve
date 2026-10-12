@@ -29,6 +29,11 @@
     full text of messages sent (sealed at rest, readable through the audit API). Retention remains question 7 below.
   - The console uses one fixed density (the prototype's balanced scale); density is not a user setting.
   - The IdP will support both OAuth 2.0/OpenID Connect and SAML 2.0. Until the product is chosen, development uses a mock IdP.
+  - Onboarding (plan 07):
+    - **Instances:** one Quackback instance per application and environment. Production and test are separate bindings. (decision 1)
+    - **Strategies:** v1 supports both creating a new managed instance and adopting an existing unbound managed instance. Adoption first shows a before/after impact report. (decision 2)
+    - **Activation:** chat, SSO sign-in and inbound support email must all pass validation first. The banner snippet stays optional. (decision 4)
+    - **Naming:** support hostnames and mail slugs are entered freely, but a hostname must be under an approved support domain (`SUPPORT_DOMAINS`). (decision 5)
 
 - Initial-release operator workflows are limited to chats and tickets. Feedback, roadmap and changelog views/actions are excluded, including feedback triage/merge and changelog publishing.
 

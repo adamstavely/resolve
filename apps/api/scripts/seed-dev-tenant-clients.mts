@@ -10,8 +10,10 @@ import { saveTenantClient } from '../lib/tenants/grants';
 
 if (process.env.NODE_ENV === 'production') throw new Error('Development seed only');
 const c = config();
-const fleet = JSON.parse(readFileSync(new URL('../../../tools/mock-tenant/tenants.json', import.meta.url), 'utf8')) as { tenants: { appKey: string; resolveClient: { id: string; secret: string } }[] };
+const fleet = JSON.parse(readFileSync(new URL('../../../tools/mock-tenant/tenants.json', import.meta.url), 'utf8')) as { tenants: { appKey: string; resolveClient?: { id: string; secret: string } }[] };
 const db = new Pool({ connectionString: c.DATABASE_URL, max: 1 });
-for (const t of fleet.tenants) await saveTenantClient(db, localSealer(c.RESOLVE_ENCRYPTION_KEY), t.appKey, { clientId: t.resolveClient.id, clientSecret: t.resolveClient.secret });
+// Instances without a client (unbound, e.g. waiting to be adopted) get one through onboarding instead.
+const seeded = fleet.tenants.filter(t => t.resolveClient);
+for (const t of seeded) await saveTenantClient(db, localSealer(c.RESOLVE_ENCRYPTION_KEY), t.appKey, { clientId: t.resolveClient!.id, clientSecret: t.resolveClient!.secret });
 await db.end();
-console.log(`Registered Resolve OAuth clients for ${fleet.tenants.map(t => t.appKey).join(', ')}`);
+console.log(`Registered Resolve OAuth clients for ${seeded.map(t => t.appKey).join(', ')}`);

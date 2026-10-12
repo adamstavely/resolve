@@ -90,7 +90,7 @@ Presence is never implied by having Resolve open or the stream connected (QB-CHA
     The default is away. Monitoring the inbox doesn't make an agent available.
   - **Sign-out:** sets the agent away in every connected app (best effort, 2 s). A closed browser leaves its session open until it idles out,
     so "your last session" can't be detected reliably.
-  - **Audit:** each app's result is audited under **Chat availability**.
+  - **Audit:** each app's result, and every viewing or typing signal, is audited under **Availability, viewing and typing**.
 - New capability `chat.availability` (fleet-agent and fleet-admin). Observers can neither signal nor set availability.
 - **Fork requirements:** QB-CHAT-8 (no typing/viewing tools) and QB-CHAT-3 (availability is a side effect of the stream today).
   The tenant must also drop an agent's availability when their grant is revoked or their directory account is disabled, because Resolve can no longer call it then.
@@ -150,4 +150,4 @@ covers several apps, or a change hint pushed to Resolve that the agent then conf
 - **Attachment downloads in the fork** (QB-FILE-1), **upload binding** (QB-FILE-2), **typing/presence tools** (QB-CHAT-8) and **explicit availability** (QB-CHAT-3).
 - **Personal drafts:** drafts are kept in memory only, per plan 09. Durable drafts need an approved retention policy.
 - **Unread count:** it covers loaded open conversations only. A tenant-side unread total would make it exact; that belongs in `get_support_dashboard` or a new aggregate.
-- **Audit volume:** viewing signals add about 3 audited requests per minute for each open thread. Retention (plan 05, question 7) should account for it.
+- **Audit volume:** viewing signals add about 3 audited requests per minute for each open thread (category **Availability, viewing and typing**). Retention (plan 05, question 7) should account for it.

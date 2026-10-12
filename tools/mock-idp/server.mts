@@ -158,6 +158,16 @@ const server = createServer(async (req, res) => {
   });
   if (req.method === 'GET' && url.pathname === '/jwks') return send(res, 200, jwks);
   if (req.method === 'GET' && url.pathname === '/directory/users') return directory(req, res);
+  // Development control: the fleet worker registers SSO for an instance it provisions (as SSO setup would in reality).
+  if (req.method === 'POST' && url.pathname === '/dev/clients') {
+   if (!safeEqual(req.headers.authorization ?? '', `Bearer ${directoryToken}`)) return send(res, 401, { error: 'unauthorized' });
+   const c = JSON.parse(await body(req)) as Client;
+   if (!/^qb-[a-z0-9-]+$/.test(c.id) || typeof c.secret !== 'string' || c.secret.length < 16 || !Array.isArray(c.redirectUris)) return send(res, 400, { error: 'invalid_client' });
+   const existing = clients.findIndex(x => x.id === c.id);
+   if (existing >= 0) clients.splice(existing, 1);
+   clients.push({ id: c.id, secret: c.secret, redirectUris: c.redirectUris.map(String) });
+   return send(res, 200, { id: c.id });
+  }
   const dev = url.pathname.match(/^\/dev\/users\/([^/]+)\/active$/);
   if (req.method === 'POST' && dev) return await setActive(req, res, decodeURIComponent(dev[1]));
   if (url.pathname === '/authorize') {

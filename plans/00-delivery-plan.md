@@ -29,6 +29,12 @@ Move ownership of the tower specification here. Retain a pointer in the old Quac
 The imported reference preserves the earlier rationale and requirement IDs, but its old paths, seam
 counts and assumptions must not override the active documents here.
 
+## Integration scope update — 2026-10-12
+
+Owner confirms Elastic Observability integration is included in the first release: service health, known issues, customer/system context and escalation evidence (document 12, E0–E2 plus applicable qualification). Deliver these independently of ServiceNow. Action pre-flight checks and verified action receipts are deferred until after the first release and retain the executor/instrumentation prerequisites documented there.
+
+ServiceNow integration follows the first release (document 13). ServiceNow owns INC incidents; Quackback retains basic support-ticket ownership. Its initial scope includes linking support tickets to existing incidents, creating incidents, and appending internal work notes from Resolve. Assignment, SLA and closure do not automatically mirror between the two systems. Owner confirms current provider versions and reachability; capture exact builds/modules during discovery.
+
 ## Scope and sequencing
 
 Confirmed first release: fleet dashboard, operator actions, application/Quackback-instance onboarding,

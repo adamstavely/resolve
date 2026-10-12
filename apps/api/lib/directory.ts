@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 import { z } from 'zod';
 import { transaction, type Queryable } from './db';
 import { writeAudit } from './audit';
+import { recomputeUser } from './fleet-admin/entitlements';
 
 /*
  * Directory observation ingestion (plan 02). The directory is authoritative for whether a person may use
@@ -37,6 +38,7 @@ async function systemAudit(tx: Queryable, operation: string, userId: string, sum
 export async function applyDirectorySnapshot(db: Pick<Pool, 'connect'>, issuer: string, source: string, snapshot: DirectorySnapshot) {
  const counts: Record<ObservationOutcome, number> = { applied: 0, stale: 0, unchanged: 0, unknown_user: 0, absent: 0 };
  for (const u of snapshot.users) {
+  let changedUser: string | null = null;
   const outcome = await transaction(db, async tx => {
    const row = (await tx.query(
     `SELECT u.id, u.enabled, u.directory_version, u.disabled_reason FROM identities i JOIN users u ON u.id = i.user_id
@@ -60,9 +62,12 @@ export async function applyDirectorySnapshot(db: Pick<Pool, 'connect'>, issuer: 
     }
    }
    await record(tx, source, issuer, u.sub, u.active, u.version, snapshot.observedAt, outcome);
+   if (outcome === 'applied') changedUser = row.id;
    return outcome;
   });
   counts[outcome]++;
+  // A directory change reaches tenants as a versioned desired-state change (denial or reinstatement).
+  if (changedUser) await recomputeUser(db, changedUser);
  }
  if (snapshot.complete) {
   const present = snapshot.users.map(u => u.sub);
@@ -76,6 +81,7 @@ export async function applyDirectorySnapshot(db: Pick<Pool, 'connect'>, issuer: 
    await systemAudit(tx, 'user.directory_disable', a.id, { source, reason: 'absent_from_complete_snapshot' });
    counts.absent++;
   });
+  for (const a of absent) await recomputeUser(db, a.id);
  }
  return counts;
 }

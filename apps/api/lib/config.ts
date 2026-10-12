@@ -23,6 +23,11 @@ const schema = z.object({
  DIRECTORY_URL: z.url(),
  DIRECTORY_TOKEN: z.string().min(16),
  DIRECTORY_POLL_SECONDS: z.coerce.number().int().min(10).max(3600).default(60),
+ /** Privileged fleet worker (contract 4): allowlisted commands only, with a service credential; never a tenant DSN. */
+ WORKER_URL: z.url(),
+ WORKER_TOKEN: z.string().min(16),
+ /** Approved support domains; onboarding accepts support hostnames only under these (owner decision 2026-10-12). */
+ SUPPORT_DOMAINS: z.string().default('support.corp.internal').transform(v => v.split(',').map(d => d.trim().toLowerCase()).filter(Boolean)),
  RESOLVE_COOKIE_SECURE: z.enum(['true', 'false']).default('true').transform(v => v === 'true'),
  SESSION_ABSOLUTE_MINUTES: z.coerce.number().int().min(5).max(24 * 60).default(12 * 60),
  SESSION_IDLE_MINUTES: z.coerce.number().int().min(5).max(24 * 60).default(60),
@@ -30,7 +35,7 @@ const schema = z.object({
  // Plain-HTTP identity providers are allowed only for the local mock, never in production.
  if (new URL(c.OIDC_ISSUER).protocol !== 'https:' && (process.env.NODE_ENV === 'production' || !isLoopback(c.OIDC_ISSUER)))
   ctx.addIssue({ code: 'custom', path: ['OIDC_ISSUER'], message: 'OIDC_ISSUER must use https outside local development' });
- for (const key of ['REGISTRY_URL', 'DIRECTORY_URL'] as const)
+ for (const key of ['REGISTRY_URL', 'DIRECTORY_URL', 'WORKER_URL'] as const)
   if (new URL(c[key]).protocol !== 'https:' && (process.env.NODE_ENV === 'production' || !isLoopback(c[key])))
    ctx.addIssue({ code: 'custom', path: [key], message: `${key} must use https outside local development` });
  if (process.env.NODE_ENV === 'production' && !c.RESOLVE_COOKIE_SECURE)

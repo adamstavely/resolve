@@ -10,10 +10,11 @@
     "node": ">=24.15.0 <25"
   },
   "scripts": {
-    "dev": "concurrently -k -n idp,tenants,directory,api,console \"npm run dev:idp\" \"npm run dev:tenants\" \"npm run dev:directory\" \"npm run dev -w @resolve/api\" \"ng serve console --host 127.0.0.1\"",
+    "dev": "concurrently -k -n idp,tenants,directory,jobs,api,console \"npm run dev:idp\" \"npm run dev:tenants\" \"npm run dev:directory\" \"npm run dev:jobs\" \"npm run dev -w @resolve/api\" \"ng serve console --host 127.0.0.1\"",
     "dev:idp": "node --env-file-if-exists=.env --import tsx tools/mock-idp/server.mts",
     "dev:tenants": "node --env-file-if-exists=.env --import tsx tools/mock-tenant/server.mts",
     "dev:directory": "node --env-file-if-exists=.env --import tsx apps/api/scripts/directory-sync.mts",
+    "dev:jobs": "node --env-file-if-exists=.env --import tsx apps/api/scripts/fleet-jobs.mts",
     "dev:seed": "node --env-file-if-exists=.env --import tsx apps/api/scripts/seed-dev-tenant-clients.mts",
     "build": "ng build console && npm run build -w @resolve/api",
     "typecheck": "tsc --noEmit -p tsconfig.check.json && ng build console --configuration development && npm run typecheck -w @resolve/api",

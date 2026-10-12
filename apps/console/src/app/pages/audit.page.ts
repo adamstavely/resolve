@@ -13,6 +13,13 @@ const ACTION_LABELS: Record<string, string> = {
  'session.login': 'Signed in', 'session.logout': 'Signed out', 'grant.connect': 'Connected an app', 'grant.disconnect': 'Disconnected an app',
  'user.manual_disable': 'Blocked access', 'user.manual_enable': 'Lifted an access block', 'user.directory_disable': 'Disabled by directory',
  'user.directory_enable': 'Re-enabled by directory', 'app.client_register': 'Registered an app client',
+ 'conversation.upload': 'Uploaded a file', 'ticket.upload': 'Uploaded a file', 'read.attachment': 'Downloaded a file', 'presence.activity': 'Signalled viewing or typing',
+ 'read.conversation_activity': 'Checked who is in a conversation', 'presence.availability': 'Changed chat availability', 'read.availability': 'Checked chat availability',
+ 'app.onboarding.start': 'Started onboarding', 'app.onboarding.step': 'Saved an onboarding step', 'app.onboarding.review': 'Reviewed an onboarding configuration',
+ 'app.onboarding.cancel': 'Cancelled onboarding', 'app.onboarding.pilot': 'Ran a pilot check', 'app.job.provision': 'Provisioning job', 'app.job.validate': 'Validation job',
+ 'app.job.activate': 'Activation job', 'app.job.suspend': 'Suspension job', 'app.job.resume': 'Resume job', 'app.mappings': 'Changed team mappings',
+ 'app.entitlements_retry': 'Retried entitlement applies', 'user.bundle_grant': 'Granted a bundle', 'user.bundle_revoke': 'Removed a granted bundle',
+ 'entitlement.desired': 'Entitlement changed', 'entitlement.applied': 'Entitlement applied in the app',
 };
 
 @Component({
@@ -35,7 +42,8 @@ const ACTION_LABELS: Record<string, string> = {
        <option value="">All</option><option value="conversation">Conversation actions</option><option value="ticket">Ticket actions</option>
        <option value="read">Reads and views</option><option value="access">Refused requests</option><option value="session">Sign-in</option>
        <option value="grant">App connections</option><option value="user">Access changes</option><option value="app">App administration</option>
-       <option value="presence">Chat availability</option>
+       <option value="presence">Availability, viewing and typing</option>
+       <option value="entitlement">Entitlement sync</option>
       </select>
      </label>
      <label for="audit-outcome">Outcome

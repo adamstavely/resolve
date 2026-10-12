@@ -13,6 +13,8 @@ export const adminUserSchema = z.strictObject({
  enabled: z.boolean(),
  disabledReason: z.enum(DISABLED_REASONS).nullable(),
  bundles: z.array(z.string()),
+ /** Bundles granted by an admin (the rest come from IdP groups at sign-in). */
+ manualBundles: z.array(z.string()),
  lastLoginAt: isoDateTimeSchema.nullable(),
 });
 export type AdminUser = z.infer<typeof adminUserSchema>;
@@ -30,8 +32,8 @@ export const tenantClientRegistrationSchema = z.strictObject({
  clientSecret: z.string().min(16).max(1000),
 });
 
-/** Operation prefixes: sign-in, app connections, people, conversation and ticket actions, reads, refused requests, app admin, availability. */
-export const AUDIT_CATEGORIES = ['session', 'grant', 'user', 'conversation', 'ticket', 'read', 'access', 'app', 'presence'] as const;
+/** Operation prefixes: sign-in, app connections, people, conversation and ticket actions, reads, refused requests, app admin, availability, entitlement sync. */
+export const AUDIT_CATEGORIES = ['session', 'grant', 'user', 'conversation', 'ticket', 'read', 'access', 'app', 'presence', 'entitlement'] as const;
 
 /** GET /api/audit query. `before` is the opaque cursor from the previous page. */
 export const auditQuerySchema = z.strictObject({

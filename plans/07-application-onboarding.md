@@ -145,10 +145,8 @@ copy-snippet and cancellation actions work with keyboard and screen readers. No 
 
 ## Decisions to settle before implementation
 
-1. May each application/environment have exactly one Quackback instance, or must v1 support shared instances across applications?
-2. Must onboarding initially support both creating an instance and adopting an existing managed instance, or can adoption follow later?
+1. ~~One instance per application/environment, or shared?~~ Decided 2026-10-12: one per application/environment.
+2. ~~Create and adopt, or create only?~~ Decided 2026-10-12: both in v1. Adoption shows an impact report first.
 3. ~~Who may register, provision and activate?~~ Decided 2026-10-12: admins, and one admin may hold all three.
-4. Which features/channels are mandatory at activation, and which should default off with follow-up tasks?
-5. What hostname, environment and mail-slug naming conventions should be inherited from central policy?
-
-These remaining choices are proposals, not inferred approvals. The owner confirmed the onboarding wizard and all-app/selected-app banner broadcasts as first-release requirements alongside dashboard and operator actions.
+4. ~~Mandatory channels at activation?~~ Decided 2026-10-12: chat, SSO and inbound email must pass; the banner snippet is optional.
+5. ~~Naming conventions?~~ Decided 2026-10-12: free entry, with the hostname restricted to the approved support domains. The owner confirmed the onboarding wizard and all-app/selected-app banner broadcasts as first-release requirements alongside dashboard and operator actions.

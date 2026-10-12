@@ -1,9 +1,11 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { z } from 'zod';
 import { BUNDLE_LABELS, CAPABILITIES, dashboardResponseSchema, whoamiResponseSchema, type CapabilityId, type DashboardResponse, type KpiMetric } from '../../../../../packages/contracts/src/index';
 import { IconComponent, MarkComponent } from '../icon.component';
 import { api, AppState, fullTime, relativeTime } from '../state';
 
+const pilotRunsSchema = z.object({ runs: z.array(z.object({ runId: z.string(), applicationName: z.string(), environment: z.string(), workspaceKey: z.string(), status: z.string(), done: z.boolean() })) });
 const KPIS: { key: KpiMetric; label: string; hint: string }[] = [
  { key: 'openTickets', label: 'Open tickets', hint: 'Visible to you' },
  { key: 'unassignedTickets', label: 'Unassigned', hint: 'Open, no individual owner' },
@@ -44,6 +46,17 @@ function connectMessage(result: string | null, app: string) {
  template: `
 <div class="launchpad">
  @if (message(); as m) { <p class="notice" [attr.data-tone]="m.alert ? 'destructive' : 'safe'" [attr.role]="m.alert ? 'alert' : 'status'">{{ m.text }}</p> }
+
+ @if (pendingPilots().length) {
+  <section class="card pad pilot-card" aria-labelledby="pilot-title">
+   <h2 class="card-title" id="pilot-title"><rs-icon name="shieldCheck" [size]="15" />Pilot checks</h2>
+   <ul class="caps">
+    @for (p of pendingPilots(); track p.runId) {
+     <li><span>You are a pilot for {{ p.applicationName }} ({{ p.environment }}). <a [routerLink]="['/onboarding', p.runId, 'pilot']">Run the pilot check<span class="sr-only"> for {{ p.applicationName }}</span></a></span></li>
+    }
+   </ul>
+  </section>
+ }
 
  <section class="lp-hero" aria-labelledby="hero-title">
   <div class="lp-mark" aria-hidden="true"><rs-mark size="100%" variant="hero" /></div>
@@ -190,7 +203,12 @@ export class HomePage {
   // Load once the session (which may still be in flight) grants the dashboard.
   let started = false;
   effect(() => { if (!started && this.state.can('dashboard.view')) { started = true; untracked(() => this.loadDashboard()); } });
+  let pilots = false;
+  effect(() => { if (!pilots && this.state.can('connection.manage')) { pilots = true; untracked(() => api('/api/onboarding/pilot-runs', pilotRunsSchema).then(r => this.pilotRuns.set(r.runs)).catch(() => {})); } });
  }
+ /** Onboarding runs where this person is a named pilot. */
+ readonly pilotRuns = signal<z.infer<typeof pilotRunsSchema>['runs']>([]);
+ readonly pendingPilots = computed(() => this.pilotRuns().filter(p => !p.done));
 
  loadDashboard() {
   this.loading.set(true);
