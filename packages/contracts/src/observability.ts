@@ -135,6 +135,8 @@ export const elasticAppMappingSchema = z.strictObject({
  caseTags: z.array(z.string().min(1).max(80)).max(10),
  deepLinkBase: z.url().nullable(),
  subjectPolicy: z.enum(['verified_external_id', 'none']),
+ /** E4: anomaly detection jobs that categorize this app's logs. Optional; without them there are no log patterns. */
+ mlJobIds: z.array(elasticIdSchema).max(10).optional(),
 });
 export type ElasticAppMapping = z.infer<typeof elasticAppMappingSchema>;
 
@@ -345,6 +347,17 @@ export const subjectLogSchema = z.strictObject({
 });
 export type SubjectLog = z.infer<typeof subjectLogSchema>;
 
+/** E4: an unusual log category from Elastic ML (restricted). No ML data means "unavailable", never "no anomalies". */
+export const logPatternSchema = z.strictObject({
+ jobId: z.string(), categoryId: z.string(), bucketSpan: z.string(),
+ kind: z.enum(['new', 'spike', 'rare']),
+ /** Redacted example with variable parts masked as <*>. */
+ pattern: z.string().max(400),
+ score: z.number(), actual: z.number(), typical: z.number(),
+ at: isoDateTimeSchema, service: z.string().nullable(),
+});
+export type LogPattern = z.infer<typeof logPatternSchema>;
+
 export const matchedIssueSchema = z.strictObject({
  issueId: uuidSchema, title: z.string(), kind: z.enum(['alert', 'case']), providerId: z.string(), since: isoDateTimeSchema,
  /** Criteria that held, and those that could not be checked or did not hold. Time overlap alone is not causation. */
@@ -370,6 +383,9 @@ export const subjectContextSchema = z.strictObject({
  lastSession: z.strictObject({ region: z.string(), at: isoDateTimeSchema }).nullable(),
  synthetics: z.array(syntheticResultSchema),
  matchedIssues: z.array(matchedIssueSchema),
+ /** E4, restricted: unusual log patterns for the mapped services, and whether ML data was available at all. */
+ patterns: z.array(logPatternSchema),
+ patternsStatus: z.enum(['available', 'unavailable', 'not_configured', 'restricted']),
  /** APM sampling and RUM coverage are not complete records; the panel says so. */
  coverage: z.string(),
  kibanaTraceBase: z.string().nullable(),
@@ -384,7 +400,8 @@ export const evidenceFactsSchema = z.strictObject({
  synthetics: z.array(syntheticResultSchema),
  alreadyTried: z.array(z.strictObject({ at: isoDateTimeSchema, operation: z.string(), actor: z.string(), outcome: z.string() })),
  /** Trace ids and log lines; shown only to observability.restricted. */
- restricted: z.strictObject({ logs: z.array(subjectLogSchema), traces: z.array(z.strictObject({ traceId: z.string(), transactionId: z.string().nullable(), at: isoDateTimeSchema })) }),
+ restricted: z.strictObject({ logs: z.array(subjectLogSchema), traces: z.array(z.strictObject({ traceId: z.string(), transactionId: z.string().nullable(), at: isoDateTimeSchema })),
+  patterns: z.array(logPatternSchema).optional() }),
 });
 export type EvidenceFacts = z.infer<typeof evidenceFactsSchema>;
 
@@ -479,3 +496,31 @@ export const issueSubscriptionSchema = z.strictObject({
 });
 export const issueSubscriptionListSchema = z.strictObject({ subscriptions: z.array(issueSubscriptionSchema) });
 export const subscribeRequestSchema = z.strictObject({ objectKind: z.enum(['ticket', 'conversation']).optional(), objectId: z.string().min(1).max(200).optional() });
+
+// ── E4: draft summaries of evidence snapshots ──
+
+/** Fact sections of a snapshot, as numbered on the evidence page; claims cite these. */
+export const EVIDENCE_SECTIONS = { 1: 'Service health at time of capture', 2: 'Customer events vs. issue windows', 3: 'Last session', 4: 'Restricted detail and log patterns', 5: 'Already tried' } as const;
+export const summaryClaimSchema = z.strictObject({
+ text: z.string().max(400),
+ citations: z.array(z.number().int().min(1).max(5)),
+ /** "fact": cites at least one non-empty section; "unsupported": no citation, shown labelled, never as a finding. */
+ kind: z.enum(['fact', 'unsupported']),
+});
+export const evidenceSummarySchema = z.strictObject({
+ id: uuidSchema, snapshotId: uuidSchema,
+ status: z.enum(['ready', 'unavailable', 'insufficient']),
+ model: z.string().nullable(), reason: z.string().nullable(),
+ claims: z.array(summaryClaimSchema),
+ cited: z.number().int(), unsupported: z.number().int(), omitted: z.number().int(),
+ createdAt: isoDateTimeSchema, createdBy: z.string(),
+ yourFeedback: z.enum(['accurate', 'off']).nullable(),
+});
+export type EvidenceSummary = z.infer<typeof evidenceSummarySchema>;
+export const evidenceSummaryResponseSchema = z.strictObject({
+ summary: evidenceSummarySchema.nullable(),
+ /** A summary exists but drew on restricted detail this viewer may not see. */
+ hiddenRestricted: z.boolean(),
+ modelConfigured: z.boolean(),
+});
+export const summaryFeedbackSchema = z.strictObject({ verdict: z.enum(['accurate', 'off']), note: z.string().trim().max(500).optional() });

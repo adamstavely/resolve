@@ -79,7 +79,7 @@ test("an agent sees the customer's system context beside the ticket, as on the p
  await expect(us).toContainText('Download payslip');
  await expect(us).toContainText("customer's last session Lisbon");
  await expect(us).toContainText('failing for everyone. That points to the service, not this account.');
- await expect(ctx).toContainText('Trace IDs, log lines and Kibana links appear for investigators');
+ await expect(ctx).toContainText('Trace IDs, log patterns, log lines and Kibana links appear for investigators');
  // The timeline toggle hides system events.
  const activity = ctx.getByRole('region', { name: 'Recent activity' });
  await expect(activity.getByText('APM', { exact: true }).first()).toBeVisible();
@@ -152,7 +152,7 @@ test('an investigator sees trace ids, Kibana links and redacted log lines; their
 
  const sam = await signedIn(browser, 'Sam Agent', ['payroll']);
  await sam.goto(`/evidence/${id}`);
- await expect(sam.getByText(/trace ids and log lines are in this snapshot\. They are shown to investigators\./)).toBeVisible();
+ await expect(sam.getByText(/trace ids, log lines and log patterns are in this snapshot\. They are shown to investigators\./)).toBeVisible();
  const asSam = await (await sam.request.get(`/api/evidence/${id}`)).json();
  expect(asSam.facts.restricted).toEqual({ logs: [], traces: [] });
  expect(asSam.hiddenRestricted).toBeGreaterThan(0);

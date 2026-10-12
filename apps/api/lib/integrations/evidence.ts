@@ -21,7 +21,7 @@ import { subjectContext } from './subject';
 
 export const RETENTION_DAYS = 30;
 const hash = (facts: EvidenceFacts) => createHash('sha256').update(canonicalJson(facts)).digest('hex');
-const restrictedCount = (f: EvidenceFacts) => f.restricted.logs.length + f.restricted.traces.length;
+const restrictedCount = (f: EvidenceFacts) => f.restricted.logs.length + f.restricted.traces.length + (f.restricted.patterns?.length ?? 0);
 
 export class EvidenceError extends Error { constructor(readonly status: number, readonly code: string, message: string) { super(message); } }
 
@@ -62,7 +62,7 @@ export async function captureSnapshot(db: Pick<Pool, 'connect' | 'query'>, seal:
   health, issues: ctx.matchedIssues, events: ctx.events.map(e => ({ ...e, traceId: null, transactionId: null })), lastSession: ctx.lastSession,
   synthetics: ctx.synthetics, alreadyTried: await alreadyTried(db, req.app.appKey, req.id),
   restricted: req.restricted
-   ? { logs: ctx.logs, traces: ctx.events.filter(e => e.traceId).map(e => ({ traceId: e.traceId!, transactionId: e.transactionId, at: e.at })) }
+   ? { logs: ctx.logs, traces: ctx.events.filter(e => e.traceId).map(e => ({ traceId: e.traceId!, transactionId: e.transactionId, at: e.at })), patterns: ctx.patterns }
    : { logs: [], traces: [] },
  };
  const classification = restrictedCount(facts) ? 'restricted' : ctx.subject.status === 'verified' ? 'subject' : 'service';

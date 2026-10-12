@@ -1,6 +1,7 @@
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { evidenceSnapshotSchema, type EvidenceSnapshot, type SubjectEvent } from '../../../../../packages/contracts/src/index';
+import type { z } from 'zod';
+import { evidenceSnapshotSchema, evidenceSummaryResponseSchema, type EvidenceSnapshot, type SubjectEvent } from '../../../../../packages/contracts/src/index';
 import { IconComponent } from '../icon.component';
 import { HEALTH_LABEL } from '../observability.service';
 import { api, AppState, fullTime, relativeTime, send } from '../state';
@@ -67,10 +68,14 @@ const NOTE_TEXT: Record<string, string> = { succeeded: 'Internal note added', pe
      </div>
 
      <div class="sec">
-      <div class="sh"><span class="cite">4</span><b>Restricted detail</b><span class="src">LOGS</span><span class="src">APM</span></div>
-      @if (s.hiddenRestricted) { <p class="ev-text"><rs-icon name="lock" [size]="13" /> {{ s.hiddenRestricted }} trace ids and log lines are in this snapshot. They are shown to investigators.</p> }
-      @else if (s.facts.restricted.logs.length) {
-       @for (l of s.facts.restricted.logs; track $index) { <div class="code ev-code">{{ l.message }}</div><div class="mono ctx-meta">{{ l.level ?? 'log' }} · {{ l.service }} · {{ time(l.at) }}</div> }
+      <div class="sh"><span class="cite">4</span><b>Log patterns and restricted detail</b><span class="src">LOGS · ML</span><span class="src">APM</span></div>
+      @if (s.hiddenRestricted) { <p class="ev-text"><rs-icon name="lock" [size]="13" /> {{ s.hiddenRestricted }} trace ids, log lines and log patterns are in this snapshot. They are shown to investigators.</p> }
+      @else if (s.facts.restricted.logs.length || s.facts.restricted.patterns?.length) {
+       @for (p of s.facts.restricted.patterns ?? []; track $index) {
+        <div class="code ev-code">{{ p.pattern }}</div>
+        <div class="mono ctx-meta">{{ p.kind === 'spike' ? p.actual + ' events, usually ' + p.typical + ' per ' + p.bucketSpan : p.kind + ' since ' + time(p.at) + ', ' + p.actual + ' events' }} · anomaly score {{ p.score }} · {{ p.jobId }}</div>
+       }
+       @for (l of s.facts.restricted.logs; track $index) { <div class="code ev-code">{{ l.message }}</div><div class="mono ctx-meta">{{ l.level ?? 'log' }} · {{ l.service }} · {{ time(l.at) }} · untrusted text</div> }
       } @else { <p class="ev-text muted">None captured.</p> }
      </div>
 
@@ -85,6 +90,39 @@ const NOTE_TEXT: Record<string, string> = { succeeded: 'Internal note added', pe
    </div>
 
    <aside class="ev-side">
+    <section class="card ev-summary" aria-labelledby="sum-title">
+     <div class="card-head ev-summary-head"><h2 class="card-title" id="sum-title"><rs-icon name="doc" [size]="15" />Draft summary</h2><span class="lbl">AI assistant · internal model</span></div>
+     @if (summary(); as r) {
+      @if (r.summary; as m) {
+       @if (m.status === 'ready') {
+        <div class="ev-claims">
+         @for (c of m.claims; track $index) {
+          @if (c.kind === 'fact') { <p>{{ c.text }} @for (n of c.citations; track n) { <span class="cite" [attr.aria-label]="'cites section ' + n">{{ n }}</span> }</p> }
+          @else { <p class="ev-unsupported"><span class="ev-unsupported-tag">Not supported by the evidence</span> {{ c.text }}</p> }
+         }
+        </div>
+        <div class="ev-claims-stats">
+         <span><b class="mono">{{ m.cited }}/{{ m.cited + m.unsupported }}</b> claims cite evidence</span>
+         <span><b class="mono">{{ m.unsupported }}</b> unsupported</span>
+         @if (m.omitted) { <span><b class="mono">{{ m.omitted }}</b> dropped (invented citations or over the six-claim limit)</span> }
+        </div>
+        <div class="ev-claims-foot">
+         <span class="grow small">Check the cited evidence before acting on this. Drafted by {{ m.createdBy }}, {{ m.model }}.</span>
+         <button class="btn btn-sm" type="button" [attr.aria-pressed]="m.yourFeedback === 'accurate'" (click)="feedback(m.id, 'accurate')">Accurate</button>
+         <button class="btn btn-sm" type="button" [attr.aria-pressed]="m.yourFeedback === 'off'" (click)="feedback(m.id, 'off')">Something's off</button>
+        </div>
+       } @else { <p class="pad small">{{ m.reason }}</p> }
+      } @else if (r.hiddenRestricted) {
+       <p class="pad small"><rs-icon name="lock" [size]="13" /> A summary of this snapshot uses restricted detail. It is shown to investigators.</p>
+      } @else if (!r.modelConfigured) {
+       <p class="pad small muted">Draft summaries are off: no internal model is configured.</p>
+      } @else { <p class="pad small muted">No draft yet.</p> }
+      @if (r.modelConfigured && state.can('observability.link')) {
+       <div class="pad-sm row"><button class="btn btn-sm" type="button" (click)="draft(s)" [disabled]="drafting()">{{ r.summary ? 'Draft again' : 'Draft a summary' }}</button></div>
+      }
+     } @else { <p class="pad small muted" role="status">Loading…</p> }
+     <p role="status" class="sr-only">{{ summaryStatus() }}</p>
+    </section>
     <section class="card" aria-labelledby="rec-title">
      <div class="card-head"><h2 class="card-title" id="rec-title">Snapshot record</h2><span class="lbl">immutable</span></div>
      <dl class="facts pad">
@@ -121,7 +159,27 @@ export class EvidencePage {
  readonly fullTime = fullTime;
  readonly windows = computed(() => (this.snap()?.facts.issues ?? []).map(i => ({ since: Date.parse(i.since), label: i.kind === 'case' ? `case ${i.providerId}` : 'the active alert' })));
  constructor() {
-  effect(() => { const id = this.id(); untracked(() => { this.snap.set(null); api(`/api/evidence/${encodeURIComponent(id)}`, evidenceSnapshotSchema).then(s => this.snap.set(s)).catch(e => this.error.set(e.message)); }); });
+  effect(() => { const id = this.id(); untracked(() => {
+   this.snap.set(null); this.summary.set(null);
+   api(`/api/evidence/${encodeURIComponent(id)}`, evidenceSnapshotSchema).then(s => this.snap.set(s)).catch(e => this.error.set(e.message));
+   this.loadSummary(id);
+  }); });
+ }
+ readonly summary = signal<z.infer<typeof evidenceSummaryResponseSchema> | null>(null);
+ readonly drafting = signal(false);
+ readonly summaryStatus = signal('');
+ loadSummary(id: string) { api(`/api/evidence/${encodeURIComponent(id)}/summary`, evidenceSummaryResponseSchema).then(r => this.summary.set(r)).catch(() => {}); }
+ async draft(s: EvidenceSnapshot) {
+  this.drafting.set(true); this.summaryStatus.set('Drafting a summary…');
+  const res = await send('POST', `/api/evidence/${s.id}/summary`, {}, evidenceSummaryResponseSchema);
+  this.drafting.set(false);
+  if (res.ok) { this.summary.set(res.data!); this.summaryStatus.set(res.data!.summary?.status === 'ready' ? 'Draft summary ready.' : res.data!.summary?.reason ?? ''); }
+  else this.summaryStatus.set(res.error!.message);
+ }
+ async feedback(summaryId: string, verdict: 'accurate' | 'off') {
+  const s = this.snap(); if (!s) return;
+  const res = await send('POST', `/api/evidence/${s.id}/summary/${summaryId}/feedback`, { verdict });
+  if (res.ok) { this.summaryStatus.set('Thanks, your feedback is recorded.'); this.loadSummary(s.id); }
  }
  time(iso: string) { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
  pct(v: number) { return `${+(v * 100).toFixed(2)}%`; }

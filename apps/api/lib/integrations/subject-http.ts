@@ -1,4 +1,5 @@
-import { evidenceCaptureSchema, type CapabilityId } from '@resolve/contracts';
+import { evidenceCaptureSchema, summaryFeedbackSchema, type CapabilityId } from '@resolve/contracts';
+import { config } from '../config';
 import { pool } from '../db';
 import { json, jsonMutation, problem } from '../http';
 import { sealer } from '../sealer';
@@ -7,6 +8,7 @@ import { appRequest, toolFailure } from '../fleet/http';
 import { callTenantTool } from '../tenants/mcp';
 import { captureSnapshot, EvidenceError, loadSnapshot, snapshotsFor, snapshotView } from './evidence';
 import { subjectContext } from './subject';
+import { generateSummary, latestSummary, recordFeedback } from './summary';
 
 /*
  * HTTP for customer context and evidence (plan 14, E2), shared by the ticket and conversation routes. Order: capability,
@@ -57,8 +59,8 @@ export async function snapshotListResponse(request: Request, appKey: string, kin
  return json({ snapshots: await snapshotsFor(pool(), appKey, kind, id) });
 }
 
-/** View (or, for observability.restricted, export) a snapshot. Access to the item is re-checked every time. */
-export async function snapshotResponse(request: Request, snapshotId: string, download: boolean) {
+/** A snapshot as this person may see it, after re-checking access to its item with the tenant. */
+async function visibleSnapshot(request: Request, snapshotId: string) {
  if (!/^[0-9a-f-]{36}$/.test(snapshotId)) return problem(404, 'NOT_FOUND', 'Snapshot not found.');
  const row = await loadSnapshot(pool(), snapshotId);
  if (!row) return problem(404, 'NOT_FOUND', 'Snapshot not found, or it has expired.');
@@ -69,9 +71,49 @@ export async function snapshotResponse(request: Request, snapshotId: string, dow
  // A snapshot is as private as the item it belongs to.
  if (!seen.ok) { await auditRead(r.principal, 'snapshot', { snapshot: snapshotId, code: seen.reason }, 'denied'); return problem(404, 'NOT_FOUND', 'Snapshot not found, or it has expired.'); }
  const restricted = r.principal.capabilities.includes('observability.restricted');
- if (download && !restricted) return problem(403, 'FORBIDDEN', 'Exporting snapshots needs the investigator role.');
- const view = snapshotView(row, restricted);
- await auditRead(r.principal, download ? 'snapshot_export' : 'snapshot', { snapshot: snapshotId, app: row.app_key, target: row.object_id, classification: row.classification, hidden: view.hiddenRestricted });
- if (download) return new Response(JSON.stringify(view, null, 1), { headers: { 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="evidence-${snapshotId}.json"`, 'Cache-Control': 'no-store' } });
- return json(view);
+ return { principal: r.principal, row, restricted, view: snapshotView(row, restricted) };
+}
+
+/** View (or, for observability.restricted, export) a snapshot. Access to the item is re-checked every time. */
+export async function snapshotResponse(request: Request, snapshotId: string, download: boolean) {
+ const v = await visibleSnapshot(request, snapshotId);
+ if (v instanceof Response) return v;
+ if (download && !v.restricted) return problem(403, 'FORBIDDEN', 'Exporting snapshots needs the investigator role.');
+ await auditRead(v.principal, download ? 'snapshot_export' : 'snapshot', { snapshot: snapshotId, app: v.row.app_key, target: v.row.object_id, classification: v.row.classification, hidden: v.view.hiddenRestricted });
+ if (download) return new Response(JSON.stringify(v.view, null, 1), { headers: { 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="evidence-${snapshotId}.json"`, 'Cache-Control': 'no-store' } });
+ return json(v.view);
+}
+
+const modelConfig = () => ({ url: config().SUMMARY_MODEL_URL ?? null, name: config().SUMMARY_MODEL_NAME, timeoutMs: 20_000 });
+
+/** The latest draft summary this person may see (E4). */
+export async function summaryResponse(request: Request, snapshotId: string) {
+ const v = await visibleSnapshot(request, snapshotId);
+ if (v instanceof Response) return v;
+ const s = await latestSummary(pool(), snapshotId, v.principal.userId, v.restricted);
+ return json({ ...s, modelConfigured: !!config().SUMMARY_MODEL_URL });
+}
+
+/** Draft a summary from the facts this person can see. Agents and investigators only (observability.link). */
+export async function draftSummaryResponse(request: Request, snapshotId: string) {
+ const raw = await jsonMutation(request);
+ if (raw instanceof Response) return raw;
+ const v = await visibleSnapshot(request, snapshotId);
+ if (v instanceof Response) return v;
+ if (!v.principal.capabilities.includes('observability.link')) return problem(403, 'FORBIDDEN', 'You do not have access to this.');
+ await generateSummary(pool(), modelConfig(), v.view, v.principal.userId, v.restricted);
+ return json({ ...(await latestSummary(pool(), snapshotId, v.principal.userId, v.restricted)), modelConfigured: !!config().SUMMARY_MODEL_URL }, 201);
+}
+
+export async function summaryFeedbackResponse(request: Request, snapshotId: string, summaryId: string) {
+ const raw = await jsonMutation(request);
+ if (raw instanceof Response) return raw;
+ const v = await visibleSnapshot(request, snapshotId);
+ if (v instanceof Response) return v;
+ const body = summaryFeedbackSchema.safeParse(raw);
+ if (!body.success || !/^[0-9a-f-]{36}$/.test(summaryId)) return problem(400, 'INVALID_REQUEST', 'Choose accurate or something is off.');
+ const owns = (await pool().query('SELECT 1 FROM evidence_summaries WHERE id = $1 AND snapshot_id = $2', [summaryId, snapshotId])).rowCount;
+ if (!owns) return problem(404, 'NOT_FOUND', 'Summary not found.');
+ await recordFeedback(pool(), summaryId, v.principal.userId, body.data.verdict, body.data.note);
+ return json({ recorded: true });
 }

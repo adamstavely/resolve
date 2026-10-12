@@ -128,7 +128,24 @@ interface TimelineEntry { at: string; text: string; system: boolean; source?: st
     </ol>
    </section>
    @if (c.restricted) {
-    <section class="card ctx-narrow" aria-labelledby="logs-title">
+    <div class="ctx-narrow stack-lg">
+    <section class="card" aria-labelledby="patterns-title">
+     <div class="card-head"><h3 class="card-title" id="patterns-title">Log patterns · {{ patternService(c) }}</h3><span class="src">LOGS · ML</span></div>
+     @if (c.patternsStatus === 'available') {
+      @for (p of c.patterns; track p.jobId + p.categoryId) {
+       <div class="ctx-row ctx-col">
+        <div class="row-wrap"><span class="status-dot" [attr.data-tone]="p.kind === 'spike' ? 'sensitive' : 'destructive'" aria-hidden="true"></span>
+         <b class="small">{{ p.kind === 'spike' ? 'Spike, ' + ratio(p) + 'x normal' : p.kind === 'rare' ? 'Rare since ' + time(p.at) : 'New since ' + time(p.at) }}</b>
+         <span class="mono ctx-meta">{{ p.actual }} events{{ p.kind === 'spike' ? ' · usually ' + p.typical + ' per ' + p.bucketSpan : '' }} · anomaly score {{ p.score }}</span></div>
+        <div class="code">{{ p.pattern }}</div>
+       </div>
+      } @empty { <div class="ctx-row muted small">No unusual log patterns in the last hour.</div> }
+      <div class="ctx-row ctx-row-center"><span class="mono ctx-meta grow">job {{ jobs(c) }} · last 60m · examples redacted, variable parts masked</span></div>
+     } @else if (c.patternsStatus === 'unavailable') {
+      <div class="ctx-row small">Machine-learning results are unavailable right now. That is not the same as no anomalies.</div>
+     } @else { <div class="ctx-row muted small">No log categorization job is mapped for this application.</div> }
+    </section>
+    <section class="card" aria-labelledby="logs-title">
      <div class="card-head"><h3 class="card-title" id="logs-title">Log lines · {{ logService(c) }}</h3><span class="src">LOGS</span></div>
      @for (l of c.logs; track $index) {
       <div class="ctx-row ctx-col"><div class="row-wrap"><span class="status-dot" [attr.data-tone]="l.level === 'error' ? 'destructive' : 'sensitive'" aria-hidden="true"></span><b class="small">{{ l.level ?? 'log' }}</b><span class="mono ctx-meta">{{ relativeTime(l.at) }}</span></div>
@@ -136,8 +153,9 @@ interface TimelineEntry { at: string; text: string; system: boolean; source?: st
      } @empty { <div class="ctx-row muted small">No log lines for this customer in the window.</div> }
      <div class="ctx-row ctx-row-center"><span class="mono ctx-meta grow">filtered: service.name, user.id, last {{ hours }}h · redacted</span></div>
     </section>
+    </div>
    } @else {
-    <div class="ctx-lock ctx-narrow"><rs-icon name="lock" [size]="16" /><div>Trace IDs, log lines and Kibana links appear for investigators. A snapshot you capture keeps the facts you can see.</div></div>
+    <div class="ctx-lock ctx-narrow"><rs-icon name="lock" [size]="16" /><div>Trace IDs, log patterns, log lines and Kibana links appear for investigators. A snapshot you capture keeps the facts you can see.</div></div>
    }
   </div>
   <p class="small muted">{{ c.coverage }} Checked <time [attr.datetime]="c.fetchedAt">{{ relativeTime(c.fetchedAt) }}</time>.</p>
@@ -222,6 +240,10 @@ export class SystemContextComponent {
   const f = c.synthetics.filter(m => m.status === 'down');
   return f.length ? f.map(m => `${m.name} (${m.location})`).join(', ') + (f.length === 1 ? ' is' : ' are') : null;
  }
+ patternService(c: SubjectContext) { return [...new Set(c.patterns.map(p => p.service).filter(Boolean))].join(', ') || 'mapped services'; }
+ jobs(c: SubjectContext) { return [...new Set(c.patterns.map(p => p.jobId))].join(', ') || '—'; }
+ ratio(p: { actual: number; typical: number }) { return Math.round(p.actual / Math.max(p.typical, 1)); }
+ time(iso: string) { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
  logService(c: SubjectContext) { return [...new Set(c.logs.map(l => l.service).filter(Boolean))].join(', ') || 'mapped services'; }
  async linkTo(issueId: string) {
   this.busy.set(true);

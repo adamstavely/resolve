@@ -32,6 +32,9 @@ const schema = z.object({
  ELASTIC_ALLOWED_HOSTS: z.string().default('').transform(v => v.split(',').map(h => h.trim().toLowerCase()).filter(Boolean)),
  /** Health poll interval per active app mapping (plan 12 §6, proposed 30 s); stale after two missed polls. */
  OBSERVABILITY_POLL_SECONDS: z.coerce.number().int().min(2).max(3600).default(30),
+ /** E4 draft summaries: an internally hosted model endpoint. Unset means summaries are off (plan 12 §9). */
+ SUMMARY_MODEL_URL: z.url().optional(),
+ SUMMARY_MODEL_NAME: z.string().min(1).max(100).default('internal-summary'),
  RESOLVE_COOKIE_SECURE: z.enum(['true', 'false']).default('true').transform(v => v === 'true'),
  SESSION_ABSOLUTE_MINUTES: z.coerce.number().int().min(5).max(24 * 60).default(12 * 60),
  SESSION_IDLE_MINUTES: z.coerce.number().int().min(5).max(24 * 60).default(60),
@@ -42,6 +45,9 @@ const schema = z.object({
  for (const key of ['REGISTRY_URL', 'DIRECTORY_URL', 'WORKER_URL'] as const)
   if (new URL(c[key]).protocol !== 'https:' && (process.env.NODE_ENV === 'production' || !isLoopback(c[key])))
    ctx.addIssue({ code: 'custom', path: [key], message: `${key} must use https outside local development` });
+ // The summary model must be internal: https, or a loopback mock outside production.
+ if (c.SUMMARY_MODEL_URL && new URL(c.SUMMARY_MODEL_URL).protocol !== 'https:' && (process.env.NODE_ENV === 'production' || !isLoopback(c.SUMMARY_MODEL_URL)))
+  ctx.addIssue({ code: 'custom', path: ['SUMMARY_MODEL_URL'], message: 'SUMMARY_MODEL_URL must use https outside local development' });
  if (process.env.NODE_ENV === 'production' && !c.RESOLVE_COOKIE_SECURE)
   ctx.addIssue({ code: 'custom', path: ['RESOLVE_COOKIE_SECURE'], message: 'Secure cookies are required in production' });
 });

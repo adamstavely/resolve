@@ -52,7 +52,7 @@ QUACKBACK_SRC=../quackback npm run test:contract   # tool inventory vs. the pinn
 Evidence: [component gate](docs/evidence/phase-0-component-gate.md),
 [contracts and tool inventory](docs/evidence/phase-0-contracts.md), [identity and connections](docs/evidence/phase-1-identity.md), [fleet read](docs/evidence/phase-2-fleet-read.md), [operator actions](docs/evidence/phase-3-operator-actions.md),
 [fleet administration](docs/evidence/phase-4-fleet-administration.md), [banner broadcasts](docs/evidence/phase-5-banner-broadcasts.md),
-[Elastic E0](docs/evidence/elastic-e0-contracts-connections.md), [Elastic E1](docs/evidence/elastic-e1-health-known-issues.md), [Elastic E2](docs/evidence/elastic-e2-customer-context-evidence.md), [Elastic E3](docs/evidence/elastic-e3-preflight-receipts.md).
+[Elastic E0](docs/evidence/elastic-e0-contracts-connections.md), [Elastic E1](docs/evidence/elastic-e1-health-known-issues.md), [Elastic E2](docs/evidence/elastic-e2-customer-context-evidence.md), [Elastic E3](docs/evidence/elastic-e3-preflight-receipts.md), [Elastic E4](docs/evidence/elastic-e4-patterns-summaries.md).
 
 `/api/readiness` reports ready only when the API has `DATABASE_URL` and the latest migration is applied.
 

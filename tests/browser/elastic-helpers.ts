@@ -36,7 +36,7 @@ export async function payrollMapped(browser: Browser, name: string) {
   services: [{ name: 'payroll-api', environment: 'production', discriminator: null }, { name: 'payroll-web', environment: 'production', discriminator: null },
    { name: 'notification-service', environment: 'production', discriminator: { field: 'labels.app', value: 'payroll' } }],
   sloIds: ['payroll-payslip-availability', 'payroll-login-latency'], monitorIds: ['payroll-login', 'payroll-payslip'], alertRuleIds: ['payroll-api-5xx-eu-west'], caseTags: ['app:payroll'],
-  deepLinkBase: 'https://kibana.corp.internal', subjectPolicy: 'verified_external_id' } }) });
+  deepLinkBase: 'https://kibana.corp.internal', subjectPolicy: 'verified_external_id', mlJobIds: ['payroll-log-categories'] } }) });
  await post(ada, '/api/admin/integrations/mappings/payroll/production/preview', {});
  const v = await (await post(ada, '/api/admin/integrations/mappings/payroll/production/isolation', {})).json();
  expect((await post(ada, '/api/admin/integrations/mappings/payroll/production/state', { state: 'active', version: v.version })).status()).toBe(200);

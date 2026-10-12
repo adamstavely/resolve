@@ -12,7 +12,7 @@ import { DslError, search, wildcard, type Doc } from './query.mjs';
  * Faults (slow, 429, 503, revoked key, late documents) are injected through /dev routes for tests.
  */
 
-export interface MockKey { id: string; secret: string; indices: string[]; spaces: string[]; features: string[]; revoked?: boolean; description?: string }
+export interface MockKey { id: string; secret: string; indices: string[]; spaces: string[]; features: string[]; cluster?: string[]; revoked?: boolean; description?: string }
 export interface Fault { kind: 'none' | 'slow' | 'rate_limit' | 'unavailable'; ms?: number; count?: number; retryAfter?: number }
 
 export interface MockElastic {
@@ -104,6 +104,22 @@ export async function startMockElastic(opts: { esPort?: number; kibanaPort?: num
    const key = authenticate(req);
    if (!key) return send(res, 401, { error: { type: 'security_exception', reason: 'unable to authenticate with provided credentials and anonymous access is not allowed for this request' }, status: 401 }, { 'WWW-Authenticate': 'ApiKey' });
    if (req.method === 'GET' && url.pathname === '/') return send(res, 200, { name: 'mock-es', cluster_name: 'resolve-mock', version: { ...VERSION, lucene_version: '10.2.0' }, tagline: 'You Know, for Search' });
+   // ML results (documented anomaly detection results APIs): records and category definitions. Needs monitor_ml.
+   const ml = url.pathname.match(/^\/_ml\/anomaly_detectors\/([A-Za-z0-9_-]+)\/results\/(records|categories)(?:\/(\d+))?$/);
+   if (ml) {
+    if (!key.cluster?.includes('monitor_ml')) return esError(res, 403, 'security_exception', `action [cluster:monitor/xpack/ml/job/results/get] is unauthorized for API key id [${key.id}]`);
+    const job = state.scenario.ml.find(j => j.jobId === ml[1]);
+    if (!job) return esError(res, 404, 'resource_not_found_exception', `No known job with id '${ml[1]}'`);
+    if (ml[2] === 'categories') {
+     const c = ml[3] ? job.categories[ml[3]] : undefined;
+     return send(res, 200, { count: c ? 1 : 0, categories: c ? [{ job_id: job.jobId, ...c, regex: '.*', max_matching_length: 200 }] : [] });
+    }
+    const b = JSON.parse(await readBody(req) || '{}');
+    const start = b.start ? Date.parse(b.start) : 0, end = b.end ? Date.parse(b.end) : Date.now(), min = Number(b.record_score ?? 0);
+    const recs = job.records.filter(r => Number(r.timestamp) >= start && Number(r.timestamp) <= end && Number(r.record_score) >= min)
+     .sort((a, b2) => Number(b2.record_score) - Number(a.record_score)).slice(0, b.page?.size ?? 100);
+    return send(res, 200, { count: recs.length, records: recs });
+   }
    if (req.method === 'DELETE' && url.pathname === '/_pit') {
     const body = JSON.parse(await readBody(req) || '{}');
     return send(res, 200, { succeeded: pits.delete(String(body.id)), num_freed: 1 });

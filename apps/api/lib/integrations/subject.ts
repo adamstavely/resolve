@@ -1,14 +1,14 @@
 import type { Pool } from 'pg';
 import {
  OBSERVABILITY_TOOL_VERSIONS, type ElasticAppMapping, type ElasticFamily, type KnownIssue, type MatchedIssue, type RegistryApp, type SubjectContext,
- type SubjectEvent, type SubjectLog, type SubjectStatus, type SyntheticResult,
+ type LogPattern, type SubjectEvent, type SubjectLog, type SubjectStatus, type SyntheticResult,
 } from '@resolve/contracts';
 import type { Sealer } from '../crypto';
 import { callTenantTool, type ToolFailure } from '../tenants/mcp';
 import { tenantHealth } from '../tenants/protocol';
 import { clientFor, ConnectionError } from './connections';
 import { ElasticError } from './elastic/client';
-import { fetchSubjectEvents, fetchSubjectLogs, fetchSynthetics } from './elastic/families';
+import { fetchLogPatterns, fetchSubjectEvents, fetchSubjectLogs, fetchSynthetics } from './elastic/families';
 import { activeIssues } from './observability';
 
 /*
@@ -22,7 +22,7 @@ export const SUBJECT_WINDOW_HOURS = 24;
 const CACHE_MS = 60_000;
 export const COVERAGE = 'APM keeps every error but only a sample of successful requests, and real-user monitoring covers browser sessions only. No events here does not mean nothing went wrong.';
 
-type ElasticPart = { events: SubjectEvent[]; logs: SubjectLog[]; synthetics: SyntheticResult[]; missing: ElasticFamily[]; fetchedAt: string };
+type ElasticPart = { events: SubjectEvent[]; logs: SubjectLog[]; synthetics: SyntheticResult[]; patterns: LogPattern[]; patternsStatus: SubjectContext['patternsStatus']; missing: ElasticFamily[]; fetchedAt: string };
 const cache = new Map<string, { at: number; part: ElasticPart }>();
 export const clearSubjectCache = () => cache.clear();
 
@@ -68,6 +68,7 @@ export async function subjectContext(db: Pick<Pool, 'query' | 'connect'>, seal: 
   appKey: req.app.appKey, objectKind: req.kind, objectId: req.id, subject: { status: who.status, externalId: who.externalId },
   window: { from: window.from.toISOString(), to: window.to.toISOString() }, fetchedAt: now.toISOString(), completeness: 'complete', missing: [],
   restricted: req.restricted, events: [], logs: [], lastSession: null, synthetics: [], matchedIssues: [], coverage: COVERAGE, kibanaTraceBase: null,
+  patterns: [], patternsStatus: req.restricted ? 'not_configured' : 'restricted',
  };
  const m = (await db.query(
   `SELECT m.mapping, m.revision, m.connection_id, m.environment FROM elastic_app_mappings m JOIN integration_connections c ON c.id = m.connection_id
@@ -97,7 +98,15 @@ export async function subjectContext(db: Pick<Pool, 'query' | 'connect'>, seal: 
    subject && req.restricted ? settle('logs', () => fetchSubjectLogs(client, m.mapping.indices.logs, subject, m.mapping.services, window)) : [],
    settle('synthetics', () => fetchSynthetics(client, m.mapping.indices.synthetics, m.mapping.monitorIds, { from: new Date(now.getTime() - 15 * 60_000), to: now })),
   ]);
-  part = { events: [...apm, ...rum].sort((a, b) => b.at.localeCompare(a.at)), logs, synthetics, missing, fetchedAt: now.toISOString() };
+  // Log patterns (E4) are service-level, restricted, and only exist when ML jobs are mapped. A failed read is
+  // "unavailable", never "no anomalies".
+  const jobs = m.mapping.mlJobIds ?? [];
+  let patterns: LogPattern[] = []; let patternsStatus: SubjectContext['patternsStatus'] = !req.restricted ? 'restricted' : jobs.length ? 'available' : 'not_configured';
+  if (req.restricted && jobs.length) {
+   try { patterns = (await fetchLogPatterns(client, jobs, { from: new Date(now.getTime() - 3600_000), to: now })).items; }
+   catch (e) { if (e instanceof ElasticError) patternsStatus = 'unavailable'; else throw e; }
+  }
+  part = { events: [...apm, ...rum].sort((a, b) => b.at.localeCompare(a.at)), logs, synthetics, patterns, patternsStatus, missing, fetchedAt: now.toISOString() };
   cache.set(key, { at: Date.now(), part });
  }
  const rumWithRegion = part.events.find(e => e.source === 'RUM' && e.region);
@@ -109,6 +118,7 @@ export async function subjectContext(db: Pick<Pool, 'query' | 'connect'>, seal: 
    completeness: part.missing.length === 0 ? 'complete' : part.missing.length >= configured ? 'unavailable' : 'partial', missing: part.missing,
    events: req.restricted ? part.events : part.events.map(strip),
    logs: req.restricted ? part.logs : [],
+   patterns: req.restricted ? part.patterns : [], patternsStatus: req.restricted ? part.patternsStatus : 'restricted',
    lastSession: rumWithRegion ? { region: rumWithRegion.region!, at: rumWithRegion.at } : null,
    synthetics: part.synthetics,
    matchedIssues: matchIssues(issues, part.events, status === 'verified'),

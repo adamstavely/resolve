@@ -1,6 +1,6 @@
 import {
- alertResultSchema, caseResultSchema, sloResultSchema, subjectEventSchema, subjectLogSchema, syntheticResultSchema,
- type AlertResult, type CaseResult, type ElasticAppMapping, type ElasticFamily, type FamilyStatus, type SloResult, type SubjectEvent, type SubjectLog, type SyntheticResult,
+ alertResultSchema, caseResultSchema, logPatternSchema, sloResultSchema, subjectEventSchema, subjectLogSchema, syntheticResultSchema,
+ type AlertResult, type CaseResult, type LogPattern, type ElasticAppMapping, type ElasticFamily, type FamilyStatus, type SloResult, type SubjectEvent, type SubjectLog, type SyntheticResult,
 } from '@resolve/contracts';
 import { ElasticClient, ElasticError } from './client';
 import { redactText, safeId } from './redact';
@@ -24,7 +24,8 @@ export interface Parsed<T> { items: T[]; dropped: number }
 type Fields = Record<string, unknown[] | undefined>;
 interface SearchBody { hits: { hits: { _id: string; _index: string; fields?: Fields }[] }; aggregations?: Record<string, unknown> }
 const first = <T = unknown>(f: Fields | undefined, k: string) => f?.[k]?.[0] as T | undefined;
-const iso = (v: unknown) => { const t = typeof v === 'string' || typeof v === 'number' ? Date.parse(String(v)) : NaN; return Number.isNaN(t) ? null : new Date(t).toISOString(); };
+/** ISO time from a date string or epoch milliseconds (ML results use epoch milliseconds). */
+const iso = (v: unknown) => { const t = typeof v === 'number' ? v : typeof v === 'string' ? Date.parse(v) : NaN; return Number.isFinite(t) ? new Date(t).toISOString() : null; };
 
 function keep<T>(schema: { safeParse(v: unknown): { success: true; data: T } | { success: false } }, rows: unknown[]): Parsed<T> {
  const items: T[] = []; let dropped = 0;
@@ -306,4 +307,43 @@ export async function fetchOperationEvents(client: ElasticClient, patterns: read
   operationId: String(first(h.fields, 'labels.resolve_operation_id') ?? ''), at: iso(first(h.fields, '@timestamp')),
   service: safeId(first(h.fields, 'service.name')) ?? 'unknown', status: first<number>(h.fields, 'http.response.status_code') ?? null, outcome: first<string>(h.fields, 'event.outcome') ?? 'unknown',
  })).filter(e => e.at);
+}
+
+// ── E4: log patterns from anomaly detection jobs that categorize logs (documented ML results APIs) ──
+
+interface MlRecord { job_id?: unknown; record_score?: unknown; timestamp?: unknown; bucket_span?: unknown; actual?: unknown; typical?: unknown; function?: unknown; by_field_value?: unknown; partition_field_value?: unknown }
+/** Mask variable parts (ids, numbers, hex) so a category reads as a pattern and carries no identifiers. */
+export function maskPattern(example: string): string {
+ const redacted = redactText(example, 400) ?? '';
+ return redacted.replace(/\b(?=[\w-]*\d)[A-Za-z0-9_-]{4,}\b/g, '<*>').replace(/\b\d+\b/g, '<*>');
+}
+export function parseMlRecord(r: MlRecord, example: string | null): unknown {
+ const actual = Array.isArray(r.actual) ? Number(r.actual[0]) : Number(r.actual);
+ const typical = Array.isArray(r.typical) ? Number(r.typical[0]) : Number(r.typical);
+ const span = typeof r.bucket_span === 'number' ? `${Math.round(r.bucket_span / 60)}m` : null;
+ return {
+  jobId: safeId(r.job_id), categoryId: r.by_field_value === undefined ? null : String(r.by_field_value), bucketSpan: span,
+  kind: r.function === 'rare' ? 'rare' : !(typical >= 1) ? 'new' : 'spike',
+  pattern: example ? maskPattern(example) : null, score: typeof r.record_score === 'number' ? Math.round(r.record_score) : null,
+  actual: Number.isFinite(actual) ? actual : null, typical: Number.isFinite(typical) ? typical : 0,
+  at: iso(r.timestamp), service: typeof r.partition_field_value === 'string' ? r.partition_field_value : null,
+ };
+}
+export async function fetchLogPatterns(client: ElasticClient, jobIds: readonly string[], w: Window, minScore = 50): Promise<Parsed<LogPattern>> {
+ const rows: unknown[] = [];
+ for (const job of jobIds) {
+  const recs = (await client.es<{ records?: MlRecord[] }>('POST', `/_ml/anomaly_detectors/${encodeURIComponent(job)}/results/records`, {
+   start: w.from.toISOString(), end: w.to.toISOString(), record_score: minScore, sort: 'record_score', desc: true, page: { from: 0, size: 10 },
+  })).body.records ?? [];
+  for (const r of recs) {
+   let example: string | null = null;
+   if (r.by_field_value !== undefined && /^\d+$/.test(String(r.by_field_value))) {
+    const c = await client.es<{ categories?: { examples?: unknown[] }[] }>('GET', `/_ml/anomaly_detectors/${encodeURIComponent(job)}/results/categories/${String(r.by_field_value)}`);
+    const ex = c.body.categories?.[0]?.examples?.[0];
+    example = typeof ex === 'string' ? ex : null;
+   }
+   rows.push(parseMlRecord(r, example));
+  }
+ }
+ return keep(logPatternSchema, rows);
 }
