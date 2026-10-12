@@ -35,4 +35,5 @@ export const aad = {
  accessToken: (userId: string, appKey: string) => `grant:${userId}:${appKey}:access`,
  refreshToken: (userId: string, appKey: string) => `grant:${userId}:${appKey}:refresh`,
  auditContent: (eventId: string) => `audit:${eventId}:content`,
+ integrationCredential: (connectionId: string) => `integration:${connectionId}:credential`,
 };

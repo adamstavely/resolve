@@ -93,7 +93,7 @@ function initialTheme(): 'light' | 'dark' {
      }
     </ul>
    }
-   @if (state.can('audit.read') || state.can('app.register') || state.can('roles.manage') || state.can('users.manage')) {
+   @if (state.can('audit.read') || state.can('app.register') || state.can('roles.manage') || state.can('users.manage') || state.can('observability.configure')) {
     <div class="sidenav-label" id="nav-admin">Administration</div>
     <ul class="nav-list" aria-labelledby="nav-admin">
      @if (state.can('app.register')) {
@@ -101,6 +101,9 @@ function initialTheme(): 'light' | 'dark' {
      }
      @if (state.can('roles.manage') || state.can('users.manage')) {
       <li><a class="tab" routerLink="/people" routerLinkActive="active" ariaCurrentWhenActive="page"><span class="nav-ic"><rs-icon name="users" [size]="17" /></span><span class="tab-name">People and roles</span></a></li>
+     }
+     @if (state.can('observability.configure')) {
+      <li><a class="tab" routerLink="/integrations" routerLinkActive="active" ariaCurrentWhenActive="page"><span class="nav-ic"><rs-icon name="pulse" [size]="17" /></span><span class="tab-name">Integrations</span></a></li>
      }
      @if (state.can('audit.read')) {
       <li><a class="tab" routerLink="/audit" routerLinkActive="active" ariaCurrentWhenActive="page"><span class="nav-ic"><rs-icon name="doc" [size]="17" /></span><span class="tab-name">Audit</span></a></li>

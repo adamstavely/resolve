@@ -83,6 +83,7 @@ export const PROTOCOL_TOOLS = {
  reply_to_ticket: 2, add_ticket_note: 2, assign_ticket: 1, set_ticket_status: 1, get_operation_result: 1, list_changes: 1,
  upload_file: 2, get_attachment: 1, signal_activity: 1, get_conversation_activity: 1, get_availability: 1, set_availability: 1,
  list_announcements: 1, upsert_announcement: 1, archive_announcement: 1, get_announcement_by_key: 1,
+ get_customer_identity: 1,
 };
 
 const b64url = (b: Buffer) => b.toString('base64url');

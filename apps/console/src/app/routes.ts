@@ -10,6 +10,7 @@ import { PilotPage } from './pages/pilot.page';
 import { ComponentsPage } from './pages/components.page';
 import { HomePage } from './pages/home.page';
 import { InboxPage } from './pages/inbox.page';
+import { IntegrationsPage } from './pages/integrations.page';
 import { TicketDetailPage } from './pages/ticket-detail.page';
 import { TicketsPage } from './pages/tickets.page';
 
@@ -27,6 +28,7 @@ export const routes: Routes = [
  { path: 'applications/onboarding/new', component: OnboardingPage, title: 'Register an application · Resolve' },
  { path: 'applications/onboarding/:runId', component: OnboardingPage, title: 'Onboarding · Resolve' },
  { path: 'applications/:appKey', component: AppAdminPage, title: 'Application · Resolve' },
+ { path: 'integrations', component: IntegrationsPage, title: 'Integrations · Resolve' },
  { path: 'people', component: PeoplePage, title: 'People and roles · Resolve' },
  { path: 'announcements', component: BroadcastsPage, title: 'Announcements · Resolve' },
  { path: 'announcements/new', component: BroadcastPage, title: 'New banner · Resolve' },

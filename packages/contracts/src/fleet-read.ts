@@ -20,6 +20,8 @@ export const TARGET_TOOL_VERSIONS = {
  get_support_dashboard: 1, // QB-DASH-1
  list_support_activity: 1, // QB-DASH-2
 } as const;
+/** Needed only for customer-level Elastic context (plan 14, E2); its absence leaves service-level context. */
+export const OBSERVABILITY_TOOL_VERSIONS = { get_customer_identity: 1 } as const; // QB-OBS-1
 
 const ts = isoDateTimeSchema;
 const priority = z.enum(['none', 'low', 'medium', 'high', 'urgent']);

@@ -12,8 +12,11 @@ export interface TextFieldProps {
  required: boolean;
  disabled: boolean;
  maxlength: number;
- /** Validated by the element. The inner control stays type="text" so it never joins form validation itself. */
- kind: 'text' | 'email' | 'url';
+ /**
+  * Validated by the element. The inner control stays type="text" so it never joins form validation itself, except
+  * `secret` (API keys): masked while typed, never autocompleted or spellchecked.
+  */
+ kind: 'text' | 'email' | 'url' | 'secret';
  autocomplete: string;
 }
 export interface TextFieldEvents { 'value-change': { value: string } }
@@ -48,9 +51,9 @@ function TextField({ host, props: p, disabled, set, emit, internals }: ElementCo
  return <div className="grid gap-1.5">
   <Label htmlFor={id + 'input'}>{p.label}{p.required && <span className="text-muted-foreground font-normal"> (required)</span>}</Label>
   {p.hint && <p id={id + 'hint'} className="text-sm text-muted-foreground m-0">{p.hint}</p>}
-  <Input ref={input} id={id + 'input'} data-element-focus="" type="text"
+  <Input ref={input} id={id + 'input'} data-element-focus="" type={p.kind === 'secret' ? 'password' : 'text'}
    inputMode={p.kind === 'email' ? 'email' : p.kind === 'url' ? 'url' : undefined}
-   autoComplete={p.autocomplete || undefined} spellCheck={p.kind === 'text' ? undefined : false}
+   autoComplete={p.kind === 'secret' ? 'off' : p.autocomplete || undefined} spellCheck={p.kind === 'text' ? undefined : false}
    value={p.value} maxLength={p.maxlength > 0 ? p.maxlength : undefined} disabled={disabled}
    aria-required={p.required || undefined} aria-invalid={show || undefined} aria-describedby={describedBy}
    className={show ? 'border-destructive' : undefined}

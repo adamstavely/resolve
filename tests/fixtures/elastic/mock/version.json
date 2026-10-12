@@ -1,0 +1,27 @@
+{
+ "meta": {
+  "source": "mock",
+  "elasticsearch": "9.1.0",
+  "buildFlavor": "default",
+  "family": "version",
+  "recordedAt": "2026-10-12T22:00:00.000Z"
+ },
+ "request": {
+  "api": "es",
+  "method": "GET",
+  "path": "/"
+ },
+ "response": {
+  "status": 200,
+  "body": {
+   "name": "mock-es",
+   "cluster_name": "resolve-mock",
+   "version": {
+    "number": "9.1.0",
+    "build_flavor": "default",
+    "lucene_version": "10.2.0"
+   },
+   "tagline": "You Know, for Search"
+  }
+ }
+}

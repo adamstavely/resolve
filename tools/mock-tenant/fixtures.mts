@@ -125,6 +125,12 @@ const conversationSummary = (c: Conversation) => ({ id: c.id, status: c.status, 
  visitorPrincipalId: c.visitorPrincipalId, assignedAgentPrincipalId: c.assignedAgentPrincipalId, assigneeName: c.assigneeName, teamName: c.teamName, waitingSince: c.waitingSince,
  visitorName: c.visitorName, unread: isUnread(c), version: c.version });
 
+/** Mock identity rule: principal_customer_1..6 signed in through the host app's signed identify; 7 and 8 did not. */
+export function customerIdentity(principalId: string | null) {
+ const n = Number(principalId?.match(/^principal_customer_(\d+)$/)?.[1]);
+ return n >= 1 && n <= 6 ? { verified: true as const, externalId: `cust-${n}` } : { verified: false as const, externalId: null };
+}
+
 export class ToolError extends Error { constructor(readonly code: 'NOT_FOUND' | 'FORBIDDEN' | 'INVALID_ARGUMENT' | 'CONFLICT' | 'OPERATION_CONFLICT' | 'FILE_NOT_AVAILABLE' | 'FILE_TYPE_NOT_ALLOWED' | 'FILE_TOO_LARGE' | 'FILE_REJECTED', message: string) { super(message); } }
 
 type Args = Record<string, unknown>;
@@ -184,6 +190,14 @@ export function callTool(data: TenantData, v: Viewer, name: string, a: Args, now
    const entries = activityFor(tickets, conversations);
    const p = page(entries, e => [e.at, e.id], str(a.cursor), num(a.limit, 20, 50));
    return { entries: p.slice, nextCursor: p.nextCursor, coverageSince: new Date(now - 30 * 24 * 3600_000).toISOString() };
+  }
+  case 'get_customer_identity': {
+   // QB-OBS-1 (target): the customer's verified external id, under the same visibility as detail. Customers 7 and 8
+   // were identified without a signed token, so they are unverified and no id is returned.
+   const principal = typeof a.conversationId === 'string' ? conversations.find(x => x.id === a.conversationId)?.visitorPrincipalId
+    : typeof a.ticketId === 'string' ? tickets.find(x => x.id === a.ticketId)?.requesterPrincipalId : undefined;
+   if (principal === undefined) throw new ToolError(typeof a.conversationId === 'string' || typeof a.ticketId === 'string' ? 'NOT_FOUND' : 'INVALID_ARGUMENT', 'Not found');
+   return customerIdentity(principal);
   }
   default: throw new ToolError('INVALID_ARGUMENT', `Unknown tool ${name}`);
  }

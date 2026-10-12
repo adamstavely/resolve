@@ -1,0 +1,121 @@
+{
+ "meta": {
+  "source": "mock",
+  "elasticsearch": "9.1.0",
+  "buildFlavor": "default",
+  "family": "alerts",
+  "recordedAt": "2026-10-12T22:00:00.000Z"
+ },
+ "request": {
+  "api": "es",
+  "method": "POST",
+  "path": "/.alerts-observability.*/_search",
+  "body": {
+   "size": 100,
+   "track_total_hits": false,
+   "_source": false,
+   "fields": [
+    "kibana.alert.uuid",
+    "kibana.alert.rule.uuid",
+    "kibana.alert.rule.name",
+    "kibana.alert.status",
+    "kibana.alert.start",
+    "kibana.alert.reason",
+    "service.name",
+    "service.environment"
+   ],
+   "sort": [
+    {
+     "kibana.alert.start": "desc"
+    }
+   ],
+   "query": {
+    "bool": {
+     "filter": [
+      {
+       "term": {
+        "kibana.space_ids": "support-ops"
+       }
+      },
+      {
+       "terms": {
+        "kibana.alert.rule.uuid": [
+         "payroll-api-5xx-eu-west"
+        ]
+       }
+      },
+      {
+       "bool": {
+        "minimum_should_match": 1,
+        "should": [
+         {
+          "term": {
+           "kibana.alert.status": "active"
+          }
+         },
+         {
+          "range": {
+           "kibana.alert.start": {
+            "gte": "2026-10-11T22:00:00.000Z"
+           }
+          }
+         }
+        ]
+       }
+      }
+     ]
+    }
+   }
+  }
+ },
+ "response": {
+  "status": 200,
+  "body": {
+   "took": 1,
+   "timed_out": false,
+   "hits": {
+    "total": {
+     "value": 1,
+     "relation": "eq"
+    },
+    "max_score": null,
+    "hits": [
+     {
+      "_index": ".alerts-observability.apm.alerts-default",
+      "_id": "e17a44eec9c33ea99568",
+      "_score": null,
+      "fields": {
+       "kibana.alert.uuid": [
+        "476bbeaec7afaff8bfeb7a8d5f9afa3a"
+       ],
+       "kibana.alert.rule.uuid": [
+        "payroll-api-5xx-eu-west"
+       ],
+       "kibana.alert.rule.name": [
+        "payroll-api 5xx in eu-west"
+       ],
+       "kibana.alert.status": [
+        "active"
+       ],
+       "kibana.alert.start": [
+        "2026-10-12T21:35:00.000Z"
+       ],
+       "kibana.alert.reason": [
+        "Failed transaction rate is 7.8% in the last 5 mins for payroll-api in production. Alert when > 2%. (debug token=[redacted])"
+       ],
+       "service.name": [
+        "payroll-api"
+       ],
+       "service.environment": [
+        "production"
+       ]
+      },
+      "sort": [
+       1791840900000
+      ]
+     }
+    ]
+   }
+  }
+ }
+}

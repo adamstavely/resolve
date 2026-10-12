@@ -50,6 +50,7 @@ export const GAPS = {
  'QB-PROTO-1': 'Tenants do not advertise supported protocol/tool versions',
  'QB-FILE-1': 'No authorized attachment download contract for Resolve',
  'QB-FILE-2': 'upload_file is not bound to an uploader and target, has no type policy, scan result, expiry or upload key',
+ 'QB-OBS-1': "No tool returns a customer's verified external id (the host app's signed-identify sub) for a conversation or ticket",
  'QB-CHAT-8': 'No OAuth typing/viewing signals or activity read; agent presence is a side effect of the stream connection',
 } as const;
 export type GapId = keyof typeof GAPS;
@@ -102,6 +103,7 @@ export const TENANT_TOOLS = {
  list_announcements: { status: 'missing', scope: 'read:announcement', permissions: ['announcement.view'], objectPolicy: 'Workspace announcements', idempotency: 'read', gaps: ['QB-ANN-1'] },
  upsert_announcement: { status: 'missing', scope: 'write:announcement', permissions: ['announcement.manage'], objectPolicy: "Fleet broadcasts use tier 'authenticated' (Everyone)", idempotency: 'keyed', gaps: ['QB-ANN-1', 'QB-ANN-2'] },
  get_announcement_by_key: { status: 'missing', scope: 'read:announcement', permissions: ['announcement.manage'], objectPolicy: 'Announcements this caller published', idempotency: 'read', gaps: ['QB-ANN-2'] },
+ get_customer_identity: { status: 'missing', scope: 'read:chat', permissions: ['conversation.view', 'ticket.view'], objectPolicy: 'Same policy as conversation/ticket detail; only the verified signed-identify external id, never one derived from email or an unverified identify', idempotency: 'read', gaps: ['QB-OBS-1'] },
  archive_announcement: { status: 'missing', scope: 'write:announcement', permissions: ['announcement.manage'], objectPolicy: 'Version-checked against local edits', idempotency: 'idempotent', gaps: ['QB-ANN-1'] },
 } as const satisfies Record<string, ToolDescriptor>;
 export type TenantToolName = keyof typeof TENANT_TOOLS;

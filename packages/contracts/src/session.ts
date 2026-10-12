@@ -16,6 +16,7 @@ export type SessionResponse = z.infer<typeof sessionResponseSchema>;
 
 export const BUNDLE_LABELS: Record<BundleId, string> = {
  'fleet-admin': 'Fleet admin', 'fleet-agent': 'Fleet agent', 'fleet-observer': 'Fleet observer', 'announcement-author': 'Announcement author',
+ 'observability-investigator': 'Observability investigator',
 };
 
 /** GET /api/apps: registered apps with the caller's own connection to each. */

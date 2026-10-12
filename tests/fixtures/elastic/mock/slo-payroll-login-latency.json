@@ -1,0 +1,48 @@
+{
+ "meta": {
+  "source": "mock",
+  "elasticsearch": "9.1.0",
+  "buildFlavor": "default",
+  "family": "slo-payroll-login-latency",
+  "recordedAt": "2026-10-12T22:00:00.000Z"
+ },
+ "request": {
+  "api": "kibana",
+  "method": "GET",
+  "path": "/api/observability/slos/payroll-login-latency"
+ },
+ "response": {
+  "status": 200,
+  "body": {
+   "id": "payroll-login-latency",
+   "name": "Sign-in under 1s",
+   "objective": {
+    "target": 0.99
+   },
+   "timeWindow": {
+    "duration": "30d",
+    "type": "rolling"
+   },
+   "budgetingMethod": "occurrences",
+   "summary": {
+    "status": "HEALTHY",
+    "sliValue": 0.9978,
+    "errorBudget": {
+     "initial": 0.010000000000000009,
+     "consumed": 0.21999999999999997,
+     "remaining": 0.78,
+     "isEstimated": false
+    },
+    "fiveMinuteBurnRate": 0.5599999999999999,
+    "oneHourBurnRate": 0.4,
+    "oneDayBurnRate": 0.13333333333333333
+   },
+   "tags": [],
+   "createdAt": "2026-07-14T22:00:00.000Z",
+   "updatedAt": "2026-10-10T22:00:00.000Z",
+   "enabled": true,
+   "revision": 1,
+   "instanceId": "*"
+  }
+ }
+}

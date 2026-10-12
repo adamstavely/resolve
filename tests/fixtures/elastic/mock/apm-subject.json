@@ -1,0 +1,331 @@
+{
+ "meta": {
+  "source": "mock",
+  "elasticsearch": "9.1.0",
+  "buildFlavor": "default",
+  "family": "apm-subject",
+  "recordedAt": "2026-10-12T22:00:00.000Z"
+ },
+ "request": {
+  "api": "es",
+  "method": "POST",
+  "path": "/traces-apm-*,logs-apm.error-*/_search",
+  "body": {
+   "size": 50,
+   "track_total_hits": false,
+   "_source": false,
+   "fields": [
+    "@timestamp",
+    "processor.event",
+    "service.name",
+    "transaction.name",
+    "transaction.type",
+    "error.grouping_name",
+    "event.outcome",
+    "http.response.status_code",
+    "transaction.duration.us",
+    "trace.id",
+    "transaction.id",
+    "client.geo.region_name",
+    "client.geo.country_iso_code"
+   ],
+   "sort": [
+    {
+     "@timestamp": "desc"
+    }
+   ],
+   "query": {
+    "bool": {
+     "filter": [
+      {
+       "term": {
+        "user.id": "subject-21d120906fd3"
+       }
+      },
+      {
+       "bool": {
+        "minimum_should_match": 1,
+        "should": [
+         {
+          "bool": {
+           "filter": [
+            {
+             "term": {
+              "service.name": "payroll-api"
+             }
+            },
+            {
+             "term": {
+              "service.environment": "production"
+             }
+            }
+           ]
+          }
+         },
+         {
+          "bool": {
+           "filter": [
+            {
+             "term": {
+              "service.name": "payroll-web"
+             }
+            },
+            {
+             "term": {
+              "service.environment": "production"
+             }
+            }
+           ]
+          }
+         },
+         {
+          "bool": {
+           "filter": [
+            {
+             "term": {
+              "service.name": "notification-service"
+             }
+            },
+            {
+             "term": {
+              "service.environment": "production"
+             }
+            },
+            {
+             "term": {
+              "labels.app": "payroll"
+             }
+            }
+           ]
+          }
+         }
+        ]
+       }
+      },
+      {
+       "range": {
+        "@timestamp": {
+         "gte": "2026-10-11T22:00:00.000Z",
+         "lte": "2026-10-12T22:00:00.000Z",
+         "format": "strict_date_optional_time"
+        }
+       }
+      },
+      {
+       "terms": {
+        "processor.event": [
+         "error",
+         "transaction"
+        ]
+       }
+      }
+     ]
+    }
+   }
+  }
+ },
+ "response": {
+  "status": 200,
+  "body": {
+   "took": 1,
+   "timed_out": false,
+   "hits": {
+    "total": {
+     "value": 5,
+     "relation": "eq"
+    },
+    "max_score": null,
+    "hits": [
+     {
+      "_index": "logs-apm.error-default",
+      "_id": "b984a376ae8ddc6881f1",
+      "_score": null,
+      "fields": {
+       "@timestamp": [
+        "2026-10-12T21:48:00.000Z"
+       ],
+       "processor.event": [
+        "error"
+       ],
+       "service.name": [
+        "payroll-api"
+       ],
+       "error.grouping_name": [
+        "upstream connect error or disconnect/reset before headers"
+       ],
+       "event.outcome": [
+        "failure"
+       ],
+       "http.response.status_code": [
+        502
+       ],
+       "trace.id": [
+        "8fd91e31892deffd3b838b660c989939"
+       ],
+       "transaction.id": [
+        "11e2fdc39ca3d2ad"
+       ]
+      },
+      "sort": [
+       1791841680000
+      ]
+     },
+     {
+      "_index": "traces-apm-default",
+      "_id": "0a7ad0b62f8cc4cad106",
+      "_score": null,
+      "fields": {
+       "@timestamp": [
+        "2026-10-12T21:47:00.000Z"
+       ],
+       "processor.event": [
+        "transaction"
+       ],
+       "service.name": [
+        "payroll-api"
+       ],
+       "transaction.name": [
+        "GET /api/payslips/{id}"
+       ],
+       "transaction.type": [
+        "request"
+       ],
+       "event.outcome": [
+        "failure"
+       ],
+       "http.response.status_code": [
+        502
+       ],
+       "transaction.duration.us": [
+        31000
+       ],
+       "trace.id": [
+        "e6d32048bf25985a93199ee14a6de5b8"
+       ],
+       "transaction.id": [
+        "42f0d1de332b7cd5"
+       ]
+      },
+      "sort": [
+       1791841620000
+      ]
+     },
+     {
+      "_index": "logs-apm.error-default",
+      "_id": "cdb98dcd6a42fa5fcb18",
+      "_score": null,
+      "fields": {
+       "@timestamp": [
+        "2026-10-12T21:46:00.000Z"
+       ],
+       "processor.event": [
+        "error"
+       ],
+       "service.name": [
+        "payroll-api"
+       ],
+       "error.grouping_name": [
+        "upstream connect error or disconnect/reset before headers"
+       ],
+       "event.outcome": [
+        "failure"
+       ],
+       "http.response.status_code": [
+        502
+       ],
+       "trace.id": [
+        "bf64fb2b866c16ce31ecbe090a7afacc"
+       ],
+       "transaction.id": [
+        "c29c804994b20268"
+       ]
+      },
+      "sort": [
+       1791841560000
+      ]
+     },
+     {
+      "_index": "traces-apm-default",
+      "_id": "8d883b464729008f1147",
+      "_score": null,
+      "fields": {
+       "@timestamp": [
+        "2026-10-12T21:30:00.000Z"
+       ],
+       "processor.event": [
+        "transaction"
+       ],
+       "service.name": [
+        "notification-service"
+       ],
+       "transaction.name": [
+        "POST /send"
+       ],
+       "transaction.type": [
+        "request"
+       ],
+       "event.outcome": [
+        "success"
+       ],
+       "http.response.status_code": [
+        202
+       ],
+       "transaction.duration.us": [
+        15000
+       ],
+       "trace.id": [
+        "63047bfa30a71c6337e8b860e36b3f6a"
+       ],
+       "transaction.id": [
+        "98e53fd8ca51f358"
+       ]
+      },
+      "sort": [
+       1791840600000
+      ]
+     },
+     {
+      "_index": "traces-apm-default",
+      "_id": "2a58ce3368b61ddd10cf",
+      "_score": null,
+      "fields": {
+       "@timestamp": [
+        "2026-10-12T19:50:00.000Z"
+       ],
+       "processor.event": [
+        "transaction"
+       ],
+       "service.name": [
+        "payroll-api"
+       ],
+       "transaction.name": [
+        "POST /api/session"
+       ],
+       "transaction.type": [
+        "request"
+       ],
+       "event.outcome": [
+        "success"
+       ],
+       "http.response.status_code": [
+        200
+       ],
+       "transaction.duration.us": [
+        120000
+       ],
+       "trace.id": [
+        "b111a6ba03e5f082810500e9c6be0e06"
+       ],
+       "transaction.id": [
+        "91199730ccadcde8"
+       ]
+      },
+      "sort": [
+       1791834600000
+      ]
+     }
+    ]
+   }
+  }
+ }
+}

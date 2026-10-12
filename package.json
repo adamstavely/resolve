@@ -10,9 +10,10 @@
     "node": ">=24.15.0 <25"
   },
   "scripts": {
-    "dev": "concurrently -k -n idp,tenants,directory,jobs,api,console \"npm run dev:idp\" \"npm run dev:tenants\" \"npm run dev:directory\" \"npm run dev:jobs\" \"npm run dev -w @resolve/api\" \"ng serve console --host 127.0.0.1\"",
+    "dev": "concurrently -k -n idp,tenants,elastic,directory,jobs,api,console \"npm run dev:idp\" \"npm run dev:tenants\" \"npm run dev:elastic\" \"npm run dev:directory\" \"npm run dev:jobs\" \"npm run dev -w @resolve/api\" \"ng serve console --host 127.0.0.1\"",
     "dev:idp": "node --env-file-if-exists=.env --import tsx tools/mock-idp/server.mts",
     "dev:tenants": "node --env-file-if-exists=.env --import tsx tools/mock-tenant/server.mts",
+    "dev:elastic": "node --env-file-if-exists=.env --import tsx tools/mock-elastic/server.mts",
     "dev:directory": "node --env-file-if-exists=.env --import tsx apps/api/scripts/directory-sync.mts",
     "dev:jobs": "node --env-file-if-exists=.env --import tsx apps/api/scripts/fleet-jobs.mts",
     "dev:seed": "node --env-file-if-exists=.env --import tsx apps/api/scripts/seed-dev-tenant-clients.mts",
@@ -23,6 +24,7 @@
     "db:migrate": "node --env-file-if-exists=.env --import tsx packages/database/src/migrate.ts",
     "db:test": "node --env-file-if-exists=.env node_modules/vitest/vitest.mjs run --config vitest.database.config.ts",
     "test:contract": "vitest run --config vitest.contract.config.ts",
+    "elastic:fixtures": "node --env-file-if-exists=.env --import tsx tools/mock-elastic/record-fixtures.mts",
     "load:stream": "node --env-file-if-exists=.env --import tsx tools/load/stream-load.mts",
     "load:harness": "node --env-file-if-exists=.env --import tsx tools/load/stream-harness.mts",
     "check": "npm run typecheck && npm test"

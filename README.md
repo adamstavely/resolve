@@ -36,7 +36,9 @@ through the IdP session without a second prompt. Home then shows KPIs and activi
 As Ada (admin), **Administration → Applications → Register application** onboards a new instance (or adopts the unbound
 Travel Desk) through the mock fleet worker; **People and roles** manages bundles. As Bea, **Announcements** publishes banner content to all or selected apps
 (each app draws it in its own banner style; see `http://127.0.0.1:3301/portal`). `npm run dev` also starts the fleet job
-dispatcher (`npm run dev:jobs`). Stream load test: `npm run load:stream -- --sessions 100` (see phase 3 evidence).
+dispatcher (`npm run dev:jobs`) and a mock Elastic Cloud Hosted 9.x (`npm run dev:elastic`: Elasticsearch on 3400, Kibana on 3401).
+As Ada, **Administration → Integrations** adds an Elastic connection (keys in `tools/mock-elastic/keys.json`) and tests what it can read.
+`npm run elastic:fixtures -- --mock` re-records the adapter's contract fixtures. Stream load test: `npm run load:stream -- --sessions 100` (see phase 3 evidence).
 
 ```sh
 npm run check              # typecheck, console build and unit tests
@@ -47,7 +49,8 @@ QUACKBACK_SRC=../quackback npm run test:contract   # tool inventory vs. the pinn
 
 Evidence: [component gate](docs/evidence/phase-0-component-gate.md),
 [contracts and tool inventory](docs/evidence/phase-0-contracts.md), [identity and connections](docs/evidence/phase-1-identity.md), [fleet read](docs/evidence/phase-2-fleet-read.md), [operator actions](docs/evidence/phase-3-operator-actions.md),
-[fleet administration](docs/evidence/phase-4-fleet-administration.md), [banner broadcasts](docs/evidence/phase-5-banner-broadcasts.md).
+[fleet administration](docs/evidence/phase-4-fleet-administration.md), [banner broadcasts](docs/evidence/phase-5-banner-broadcasts.md),
+[Elastic E0](docs/evidence/elastic-e0-contracts-connections.md).
 
 `/api/readiness` reports ready only when the API has `DATABASE_URL` and the latest migration is applied.
 

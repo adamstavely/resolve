@@ -1,0 +1,53 @@
+{
+ "meta": {
+  "source": "mock",
+  "elasticsearch": "9.1.0",
+  "buildFlavor": "default",
+  "family": "cases",
+  "recordedAt": "2026-10-12T22:00:00.000Z"
+ },
+ "request": {
+  "api": "kibana",
+  "method": "GET",
+  "path": "/api/cases/_find",
+  "query": {
+   "tags": [
+    "app:payroll"
+   ],
+   "status": [
+    "open",
+    "in-progress"
+   ],
+   "owner": "observability",
+   "perPage": "50",
+   "sortField": "updatedAt",
+   "sortOrder": "desc"
+  }
+ },
+ "response": {
+  "status": 200,
+  "body": {
+   "cases": [
+    {
+     "id": "case-payroll-1182",
+     "version": "WzEsMV0=",
+     "title": "Payslip downloads failing in EU-West",
+     "status": "open",
+     "tags": [
+      "app:payroll",
+      "eu-west"
+     ],
+     "owner": "observability",
+     "created_at": "2026-10-12T21:38:00.000Z",
+     "updated_at": "2026-10-12T21:54:00.000Z",
+     "totalAlerts": 1,
+     "totalComment": 3
+    }
+   ],
+   "page": 1,
+   "per_page": 50,
+   "total": 1,
+   "count_open_cases": 1
+  }
+ }
+}

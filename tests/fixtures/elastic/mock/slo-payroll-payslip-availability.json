@@ -1,0 +1,48 @@
+{
+ "meta": {
+  "source": "mock",
+  "elasticsearch": "9.1.0",
+  "buildFlavor": "default",
+  "family": "slo-payroll-payslip-availability",
+  "recordedAt": "2026-10-12T22:00:00.000Z"
+ },
+ "request": {
+  "api": "kibana",
+  "method": "GET",
+  "path": "/api/observability/slos/payroll-payslip-availability"
+ },
+ "response": {
+  "status": 200,
+  "body": {
+   "id": "payroll-payslip-availability",
+   "name": "Payslip downloads available",
+   "objective": {
+    "target": 0.995
+   },
+   "timeWindow": {
+    "duration": "30d",
+    "type": "rolling"
+   },
+   "budgetingMethod": "occurrences",
+   "summary": {
+    "status": "DEGRADING",
+    "sliValue": 0.9961,
+    "errorBudget": {
+     "initial": 0.0050000000000000044,
+     "consumed": 0.78,
+     "remaining": 0.22,
+     "isEstimated": false
+    },
+    "fiveMinuteBurnRate": 5.88,
+    "oneHourBurnRate": 4.2,
+    "oneDayBurnRate": 1.4000000000000001
+   },
+   "tags": [],
+   "createdAt": "2026-07-14T22:00:00.000Z",
+   "updatedAt": "2026-10-10T22:00:00.000Z",
+   "enabled": true,
+   "revision": 1,
+   "instanceId": "*"
+  }
+ }
+}

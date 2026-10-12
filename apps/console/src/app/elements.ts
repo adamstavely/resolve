@@ -24,7 +24,7 @@ export class ResolveTextField {
  readonly required = input(false);
  readonly disabled = input(false);
  readonly maxlength = input(0);
- readonly kind = input<'text' | 'email' | 'url'>('text');
+ readonly kind = input<'text' | 'email' | 'url' | 'secret'>('text');
  readonly autocomplete = input('');
  constructor() {
   bind(this.element, () => ({ label: this.label(), value: this.value(), hint: this.hint(), error: this.error(), required: this.required(),

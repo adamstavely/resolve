@@ -78,6 +78,9 @@ describe('capability catalogue', () => {
    'ticket.assign': ['QB-TICKET-2'],
    'ticket.status': ['QB-TICKET-2'],
    'broadcast.publish': ['QB-ANN-1', 'QB-ANN-2'],
+   // Customer-level Elastic context needs the verified external id (plan 14); service health needs no tenant tool.
+   'observability.subject': ['QB-OBS-1'],
+   'observability.link': ['QB-CHAT-1', 'QB-CHAT-6'],
   } satisfies Partial<Record<CapabilityId, string[]>>);
  });
 });

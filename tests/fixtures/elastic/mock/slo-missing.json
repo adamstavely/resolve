@@ -1,0 +1,21 @@
+{
+ "meta": {
+  "source": "mock",
+  "elasticsearch": "9.1.0",
+  "buildFlavor": "default",
+  "family": "slo-missing",
+  "recordedAt": "2026-10-12T22:00:00.000Z"
+ },
+ "request": {
+  "api": "kibana",
+  "method": "GET",
+  "path": "/api/observability/slos/resolve-fixture-no-such-slo"
+ },
+ "response": {
+  "status": 404,
+  "body": {
+   "errorCode": "NOT_FOUND",
+   "elasticType": null
+  }
+ }
+}

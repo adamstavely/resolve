@@ -175,6 +175,9 @@ select {height:var(--control-h); padding:0 8px; border-radius:var(--r-sm); borde
 table.data {border-collapse:collapse; width:100%; font-size:var(--fs-sm);}
 table.data th {text-align:left; font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.06em; font-weight:650; color:var(--ink-3); padding:8px 10px; border-bottom:1px solid var(--border);}
 table.data td {padding:10px; border-bottom:1px solid var(--border); vertical-align:top;}
+/* Row headers read as data, not as column labels. */
+table.data tbody th[scope="row"] {text-transform:none; letter-spacing:normal; font-size:var(--fs-sm); font-weight:560; color:var(--ink); padding:10px; vertical-align:top;}
+table.data caption:not(.sr-only) {text-align:left; padding:0 10px 6px;}
 table.data tr:last-child td {border-bottom:0;}
 table.data td.small {overflow-wrap:anywhere;}
 

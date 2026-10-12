@@ -1,0 +1,294 @@
+{
+ "meta": {
+  "source": "mock",
+  "elasticsearch": "9.1.0",
+  "buildFlavor": "default",
+  "family": "synthetics",
+  "recordedAt": "2026-10-12T22:00:00.000Z"
+ },
+ "request": {
+  "api": "es",
+  "method": "POST",
+  "path": "/synthetics-*/_search",
+  "body": {
+   "size": 0,
+   "track_total_hits": false,
+   "query": {
+    "bool": {
+     "filter": [
+      {
+       "terms": {
+        "monitor.id": [
+         "payroll-login",
+         "payroll-payslip"
+        ]
+       }
+      },
+      {
+       "exists": {
+        "field": "summary"
+       }
+      },
+      {
+       "range": {
+        "@timestamp": {
+         "gte": "2026-10-12T21:45:00.000Z",
+         "lte": "2026-10-12T22:00:00.000Z",
+         "format": "strict_date_optional_time"
+        }
+       }
+      }
+     ]
+    }
+   },
+   "aggs": {
+    "monitors": {
+     "terms": {
+      "field": "monitor.id",
+      "size": 2
+     },
+     "aggs": {
+      "locations": {
+       "terms": {
+        "field": "observer.geo.name",
+        "size": 20
+       },
+       "aggs": {
+        "latest": {
+         "top_hits": {
+          "size": 1,
+          "sort": [
+           {
+            "@timestamp": "desc"
+           }
+          ],
+          "_source": false,
+          "fields": [
+           "monitor.id",
+           "monitor.name",
+           "monitor.status",
+           "monitor.duration.us",
+           "observer.geo.name",
+           "@timestamp"
+          ]
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "response": {
+  "status": 200,
+  "body": {
+   "took": 1,
+   "timed_out": false,
+   "hits": {
+    "total": {
+     "value": 12,
+     "relation": "eq"
+    },
+    "max_score": null,
+    "hits": []
+   },
+   "aggregations": {
+    "monitors": {
+     "doc_count_error_upper_bound": 0,
+     "sum_other_doc_count": 0,
+     "buckets": [
+      {
+       "key": "payroll-login",
+       "doc_count": 6,
+       "locations": {
+        "doc_count_error_upper_bound": 0,
+        "sum_other_doc_count": 0,
+        "buckets": [
+         {
+          "key": "eu-west",
+          "doc_count": 3,
+          "latest": {
+           "hits": {
+            "total": {
+             "value": 3,
+             "relation": "eq"
+            },
+            "hits": [
+             {
+              "_index": "synthetics-browser-default",
+              "_id": "82937d585a9df5d4a92b",
+              "_score": null,
+              "fields": {
+               "monitor.id": [
+                "payroll-login"
+               ],
+               "monitor.name": [
+                "Sign in"
+               ],
+               "monitor.status": [
+                "up"
+               ],
+               "monitor.duration.us": [
+                312000
+               ],
+               "observer.geo.name": [
+                "eu-west"
+               ],
+               "@timestamp": [
+                "2026-10-12T21:59:00.000Z"
+               ]
+              },
+              "sort": [
+               1791842340000
+              ]
+             }
+            ]
+           }
+          }
+         },
+         {
+          "key": "us-east",
+          "doc_count": 3,
+          "latest": {
+           "hits": {
+            "total": {
+             "value": 3,
+             "relation": "eq"
+            },
+            "hits": [
+             {
+              "_index": "synthetics-browser-default",
+              "_id": "3c18525b28495a66385f",
+              "_score": null,
+              "fields": {
+               "monitor.id": [
+                "payroll-login"
+               ],
+               "monitor.name": [
+                "Sign in"
+               ],
+               "monitor.status": [
+                "up"
+               ],
+               "monitor.duration.us": [
+                290000
+               ],
+               "observer.geo.name": [
+                "us-east"
+               ],
+               "@timestamp": [
+                "2026-10-12T21:59:00.000Z"
+               ]
+              },
+              "sort": [
+               1791842340000
+              ]
+             }
+            ]
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "key": "payroll-payslip",
+       "doc_count": 6,
+       "locations": {
+        "doc_count_error_upper_bound": 0,
+        "sum_other_doc_count": 0,
+        "buckets": [
+         {
+          "key": "eu-west",
+          "doc_count": 3,
+          "latest": {
+           "hits": {
+            "total": {
+             "value": 3,
+             "relation": "eq"
+            },
+            "hits": [
+             {
+              "_index": "synthetics-browser-default",
+              "_id": "280e31c4312edc846887",
+              "_score": null,
+              "fields": {
+               "monitor.id": [
+                "payroll-payslip"
+               ],
+               "monitor.name": [
+                "Download payslip"
+               ],
+               "monitor.status": [
+                "down"
+               ],
+               "monitor.duration.us": [
+                30000000
+               ],
+               "observer.geo.name": [
+                "eu-west"
+               ],
+               "@timestamp": [
+                "2026-10-12T21:59:00.000Z"
+               ]
+              },
+              "sort": [
+               1791842340000
+              ]
+             }
+            ]
+           }
+          }
+         },
+         {
+          "key": "us-east",
+          "doc_count": 3,
+          "latest": {
+           "hits": {
+            "total": {
+             "value": 3,
+             "relation": "eq"
+            },
+            "hits": [
+             {
+              "_index": "synthetics-browser-default",
+              "_id": "82f997934964113682d0",
+              "_score": null,
+              "fields": {
+               "monitor.id": [
+                "payroll-payslip"
+               ],
+               "monitor.name": [
+                "Download payslip"
+               ],
+               "monitor.status": [
+                "up"
+               ],
+               "monitor.duration.us": [
+                410000
+               ],
+               "observer.geo.name": [
+                "us-east"
+               ],
+               "@timestamp": [
+                "2026-10-12T21:59:00.000Z"
+               ]
+              },
+              "sort": [
+               1791842340000
+              ]
+             }
+            ]
+           }
+          }
+         }
+        ]
+       }
+      }
+     ]
+    }
+   }
+  }
+ }
+}

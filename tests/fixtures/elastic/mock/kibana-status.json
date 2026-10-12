@@ -1,0 +1,30 @@
+{
+ "meta": {
+  "source": "mock",
+  "elasticsearch": "9.1.0",
+  "buildFlavor": "default",
+  "family": "kibana-status",
+  "recordedAt": "2026-10-12T22:00:00.000Z"
+ },
+ "request": {
+  "api": "kibana-root",
+  "method": "GET",
+  "path": "/api/status"
+ },
+ "response": {
+  "status": 200,
+  "body": {
+   "name": "mock-kibana",
+   "version": {
+    "number": "9.1.0",
+    "build_flavor": "default",
+    "build_snapshot": false
+   },
+   "status": {
+    "overall": {
+     "level": "available"
+    }
+   }
+  }
+ }
+}

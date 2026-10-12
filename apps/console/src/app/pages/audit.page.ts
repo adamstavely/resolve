@@ -20,6 +20,8 @@ const ACTION_LABELS: Record<string, string> = {
  'app.job.activate': 'Activation job', 'app.job.suspend': 'Suspension job', 'app.job.resume': 'Resume job', 'app.mappings': 'Changed team mappings',
  'app.entitlements_retry': 'Retried entitlement applies', 'user.bundle_grant': 'Granted a bundle', 'user.bundle_revoke': 'Removed a granted bundle',
  'entitlement.desired': 'Entitlement changed', 'entitlement.applied': 'Entitlement applied in the app',
+ 'observability.connection_create': 'Added an Elastic connection', 'observability.connection_test': 'Tested an Elastic connection',
+ 'observability.credential_rotate': 'Rotated an Elastic credential', 'observability.kill_switch': 'Changed the Elastic kill switch',
 };
 
 @Component({
@@ -44,6 +46,8 @@ const ACTION_LABELS: Record<string, string> = {
        <option value="grant">App connections</option><option value="user">Access changes</option><option value="app">App administration</option>
        <option value="presence">Availability, viewing and typing</option>
        <option value="entitlement">Entitlement sync</option>
+       <option value="broadcast">Announcements</option>
+       <option value="observability">Elastic integration</option>
       </select>
      </label>
      <label for="audit-outcome">Outcome

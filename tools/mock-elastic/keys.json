@@ -1,0 +1,31 @@
+{
+ "esPort": 3400,
+ "kibanaPort": 3401,
+ "keys": [
+  {
+   "id": "resolve-reader",
+   "secret": "dev-only-mock-elastic-reader-key",
+   "description": "Read-only key for Resolve: APM, RUM, logs, synthetics and observability alerts; SLOs and cases in support-ops",
+   "indices": ["traces-apm*", "logs-apm*", "logs-*", "synthetics-*", ".alerts-observability.*"],
+   "spaces": ["support-ops"],
+   "features": ["slo", "cases"]
+  },
+  {
+   "id": "resolve-narrow",
+   "secret": "dev-only-mock-elastic-narrow-key",
+   "description": "APM traces only, and no Kibana space: every other family is denied",
+   "indices": ["traces-apm-*"],
+   "spaces": [],
+   "features": []
+  },
+  {
+   "id": "resolve-revoked",
+   "secret": "dev-only-mock-elastic-revoked-key",
+   "description": "Revoked: every call is unauthenticated",
+   "indices": ["traces-apm*"],
+   "spaces": ["support-ops"],
+   "features": ["slo"],
+   "revoked": true
+  }
+ ]
+}

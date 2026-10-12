@@ -1,0 +1,229 @@
+{
+ "meta": {
+  "source": "mock",
+  "elasticsearch": "9.1.0",
+  "buildFlavor": "default",
+  "family": "rum-subject",
+  "recordedAt": "2026-10-12T22:00:00.000Z"
+ },
+ "request": {
+  "api": "es",
+  "method": "POST",
+  "path": "/traces-apm.rum-*/_search",
+  "body": {
+   "size": 50,
+   "track_total_hits": false,
+   "_source": false,
+   "fields": [
+    "@timestamp",
+    "processor.event",
+    "service.name",
+    "transaction.name",
+    "transaction.type",
+    "error.grouping_name",
+    "event.outcome",
+    "http.response.status_code",
+    "transaction.duration.us",
+    "trace.id",
+    "transaction.id",
+    "client.geo.region_name",
+    "client.geo.country_iso_code"
+   ],
+   "sort": [
+    {
+     "@timestamp": "desc"
+    }
+   ],
+   "query": {
+    "bool": {
+     "filter": [
+      {
+       "term": {
+        "user.id": "subject-21d120906fd3"
+       }
+      },
+      {
+       "bool": {
+        "minimum_should_match": 1,
+        "should": [
+         {
+          "bool": {
+           "filter": [
+            {
+             "term": {
+              "service.name": "payroll-api"
+             }
+            },
+            {
+             "term": {
+              "service.environment": "production"
+             }
+            }
+           ]
+          }
+         },
+         {
+          "bool": {
+           "filter": [
+            {
+             "term": {
+              "service.name": "payroll-web"
+             }
+            },
+            {
+             "term": {
+              "service.environment": "production"
+             }
+            }
+           ]
+          }
+         },
+         {
+          "bool": {
+           "filter": [
+            {
+             "term": {
+              "service.name": "notification-service"
+             }
+            },
+            {
+             "term": {
+              "service.environment": "production"
+             }
+            },
+            {
+             "term": {
+              "labels.app": "payroll"
+             }
+            }
+           ]
+          }
+         }
+        ]
+       }
+      },
+      {
+       "range": {
+        "@timestamp": {
+         "gte": "2026-10-11T22:00:00.000Z",
+         "lte": "2026-10-12T22:00:00.000Z",
+         "format": "strict_date_optional_time"
+        }
+       }
+      },
+      {
+       "terms": {
+        "processor.event": [
+         "error",
+         "transaction"
+        ]
+       }
+      }
+     ]
+    }
+   }
+  }
+ },
+ "response": {
+  "status": 200,
+  "body": {
+   "took": 1,
+   "timed_out": false,
+   "hits": {
+    "total": {
+     "value": 2,
+     "relation": "eq"
+    },
+    "max_score": null,
+    "hits": [
+     {
+      "_index": "traces-apm.rum-default",
+      "_id": "f52a1800e770513f861d",
+      "_score": null,
+      "fields": {
+       "@timestamp": [
+        "2026-10-12T21:47:00.000Z"
+       ],
+       "processor.event": [
+        "transaction"
+       ],
+       "service.name": [
+        "payroll-web"
+       ],
+       "transaction.name": [
+        "/payslips"
+       ],
+       "transaction.type": [
+        "page-load"
+       ],
+       "event.outcome": [
+        "success"
+       ],
+       "transaction.duration.us": [
+        8400000
+       ],
+       "trace.id": [
+        "21e6e8e7a44335fbd05fe586cb72b0cb"
+       ],
+       "transaction.id": [
+        "b1651353bbddc56f"
+       ],
+       "client.geo.region_name": [
+        "Lisbon"
+       ],
+       "client.geo.country_iso_code": [
+        "PT"
+       ]
+      },
+      "sort": [
+       1791841620000
+      ]
+     },
+     {
+      "_index": "traces-apm.rum-default",
+      "_id": "3b22ad383710251c1445",
+      "_score": null,
+      "fields": {
+       "@timestamp": [
+        "2026-10-12T19:55:00.000Z"
+       ],
+       "processor.event": [
+        "transaction"
+       ],
+       "service.name": [
+        "payroll-web"
+       ],
+       "transaction.name": [
+        "/login"
+       ],
+       "transaction.type": [
+        "page-load"
+       ],
+       "event.outcome": [
+        "success"
+       ],
+       "transaction.duration.us": [
+        1900000
+       ],
+       "trace.id": [
+        "dc1083fd865bdbee58cb6f8b6ba703e0"
+       ],
+       "transaction.id": [
+        "c44ecce3bdf6e7d1"
+       ],
+       "client.geo.region_name": [
+        "Lisbon"
+       ],
+       "client.geo.country_iso_code": [
+        "PT"
+       ]
+      },
+      "sort": [
+       1791834900000
+      ]
+     }
+    ]
+   }
+  }
+ }
+}

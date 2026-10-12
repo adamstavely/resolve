@@ -33,7 +33,7 @@ export const tenantClientRegistrationSchema = z.strictObject({
 });
 
 /** Operation prefixes: sign-in, app connections, people, conversation and ticket actions, reads, refused requests, app admin, availability, entitlement sync. */
-export const AUDIT_CATEGORIES = ['session', 'grant', 'user', 'conversation', 'ticket', 'read', 'access', 'app', 'presence', 'entitlement'] as const;
+export const AUDIT_CATEGORIES = ['session', 'grant', 'user', 'conversation', 'ticket', 'read', 'access', 'app', 'presence', 'entitlement', 'broadcast', 'observability'] as const;
 
 /** GET /api/audit query. `before` is the opaque cursor from the previous page. */
 export const auditQuerySchema = z.strictObject({

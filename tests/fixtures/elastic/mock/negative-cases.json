@@ -1,0 +1,27 @@
+{
+ "meta": {
+  "source": "mock",
+  "elasticsearch": "9.1.0",
+  "buildFlavor": "default",
+  "family": "negative-cases",
+  "recordedAt": "2026-10-12T22:00:00.000Z"
+ },
+ "request": {
+  "api": "kibana",
+  "method": "GET",
+  "path": "/api/cases/_find",
+  "query": {
+   "tags": [
+    "app:payroll"
+   ],
+   "owner": "observability"
+  }
+ },
+ "response": {
+  "status": 403,
+  "body": {
+   "errorCode": "FORBIDDEN",
+   "elasticType": null
+  }
+ }
+}

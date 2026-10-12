@@ -1,6 +1,6 @@
 # Elastic integration — implementation plan
 
-Status: proposed, 2026-10-12. This turns [plan 12](12-elastic-observability-integration.md) and the `design/reference/resolve-integrations.html`
+Status: E0 built and tested against the mock, 2026-10-12 ([evidence](../docs/evidence/elastic-e0-contracts-connections.md)); E1 next. This turns [plan 12](12-elastic-observability-integration.md) and the `design/reference/resolve-integrations.html`
 prototype (seven boards) into buildable work for this repository. Scope is the confirmed first release: E0–E2, with
 E5 qualification folded into Phase 6. E3 (pre-flight and verified receipts), E4 (ML patterns, AI summaries) and the
 ServiceNow boards are out of scope.
@@ -102,8 +102,7 @@ throughout: **facts, observed correlations, coverage limits and hypotheses are s
 packages/contracts/src/observability.ts     DTOs (health, issue, subject context, snapshot, mapping, connection), zod, schemaVersion
 apps/api/lib/integrations/elastic/
   client.ts        HTTPS client: host allowlist, every resolved address checked, no redirects off-host, CA pinning, timeouts, 429 Retry-After
-  queries.ts       Parameterized, projected, time-bounded queries per family (no user DSL/KQL)
-  families/        slo.ts, alerts.ts, synthetics.ts, apm.ts, rum.ts, cases.ts — each parses into contracts, fixture-tested
+  families.ts      One adapter per family (SLO, alerts, synthetics, APM, RUM, cases) + discovery probes; parses into contracts, fixture-tested
   redact.ts        Field allowlist + secret/token/payment/PII scrubbers before cache, log, export
   health.ts        Aggregation: unknown | healthy | degraded | critical | stale, with completeness
   correlate.ts     Known-issue matching (matched + missing criteria), affected-subject counts (exact vs approximate)
