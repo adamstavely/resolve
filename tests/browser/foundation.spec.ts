@@ -16,7 +16,7 @@ test('backend contract, self-hosted fonts and no external requests', async ({ pa
 });
 
 test('axe in both themes, with 320px reflow', async ({ page }) => {
- await page.goto('/');
+ await page.goto('/components');
  await expect(page.getByLabel('Application name')).toBeVisible();
  for (const theme of ['light', 'dark']) {
   if (theme === 'dark') await page.getByRole('button', { name: 'Dark appearance' }).click();

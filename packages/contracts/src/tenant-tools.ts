@@ -136,7 +136,7 @@ export const toolResults = {
   tickets: z.array(z.object({ id: z.string(), number: z.number().int(), reference: z.string(), type: z.enum(['customer', 'back_office', 'tracker']), title: z.string(), status: z.string(), statusCategory: z.enum(['open', 'pending', 'closed']), stage: z.string(), priority, requesterPrincipalId: z.string().nullable(), assigneePrincipalId: z.string().nullable(), assigneeTeamId: z.string().nullable(), updatedAt: ts })),
  }),
  get_ticket: z.object({
-  ticket: z.object({ id: z.string(), number: z.number().int(), title: z.string(), status: z.object({ name: z.string(), category: z.enum(['open', 'pending', 'closed']) }), stage: z.string(), priority, assigneePrincipalId: z.string().nullable(), assigneeTeamId: z.string().nullable(), dueAt: ts.nullable(), createdAt: ts, updatedAt: ts }),
+  ticket: z.object({ id: z.string(), number: z.number().int(), reference: z.string(), title: z.string(), status: z.object({ name: z.string(), category: z.enum(['open', 'pending', 'closed']) }), stage: z.string(), priority, assigneePrincipalId: z.string().nullable(), assigneeTeamId: z.string().nullable(), dueAt: ts.nullable(), createdAt: ts, updatedAt: ts }),
   messages: z.array(message), hasMore: z.boolean(), nextCursor: z.string().nullable(),
  }),
  reply_to_ticket: z.object({ id: z.string(), ticketId: z.string(), createdAt: ts }),

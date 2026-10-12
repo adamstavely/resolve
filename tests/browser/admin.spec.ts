@@ -46,7 +46,7 @@ test('an admin blocks a person immediately and lifts the block; both are audited
  await signInAs(bo, 'Bo Blockable');
  await expect(bo.getByText('Signed in as Bo Blockable')).toBeVisible();
 
- await ada.reload();
+ await ada.goto('/audit');
  await ada.getByLabel('Activity').selectOption('user');
  const row = ada.getByRole('row').filter({ hasText: 'Blocked access' }).first();
  await expect(row).toContainText('Ada Admin');

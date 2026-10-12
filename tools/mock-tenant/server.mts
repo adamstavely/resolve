@@ -88,6 +88,8 @@ async function startTenant(t: TenantConfig) {
   return { principalId: p.user.principalId, role: p.role, teams: p.teams, analytics: t.analyticsRoles.includes(p.role) };
  };
  const stats = { toolCalls: 0, protocolCalls: 0 };
+ /** Development fault injection for partial-failure tests: tool calls by one user (IdP subject) fail or hang. */
+ const failFor = new Map<string, 'error' | 'timeout'>();
 
  /** Minimal MCP JSON-RPC endpoint: tools/call for the gap-fixed read tools, results as JSON text content (as Quackback does). */
  async function mcp(req: IncomingMessage, res: ServerResponse) {
@@ -97,6 +99,9 @@ async function startTenant(t: TenantConfig) {
   catch { res.writeHead(401, { 'WWW-Authenticate': 'Bearer error="invalid_token"', 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ error: 'invalid_token' })); }
   const rpc = JSON.parse(await body(req));
   stats.toolCalls++;
+  const failMode = failFor.get(String(payload.sub));
+  if (failMode === 'error') return send(res, 500, { error: 'injected failure' });
+  if (failMode === 'timeout') await new Promise(r => setTimeout(r, 8000));
   const reply = (result: unknown) => send(res, 200, { jsonrpc: '2.0', id: rpc.id ?? null, result });
   if (rpc.method !== 'tools/call') return send(res, 200, { jsonrpc: '2.0', id: rpc.id ?? null, error: { code: -32601, message: 'Method not found' } });
   if (!String(payload.scope).split(' ').includes('read:chat')) {
@@ -220,6 +225,12 @@ async function startTenant(t: TenantConfig) {
     return send(res, 200, { protocolVersions: [1], tools: { list_tickets: 2, get_ticket: 1, list_conversations: 1, get_conversation: 2, get_support_dashboard: 1, list_support_activity: 1 } });
    }
    if (req.method === 'GET' && url.pathname === '/dev/stats') return send(res, 200, stats);
+   if (req.method === 'POST' && url.pathname === '/dev/fail') {
+    const { mode, sub } = JSON.parse(await body(req));
+    const id = userFor(idp, String(sub), '').id;
+    if (mode === 'error' || mode === 'timeout') failFor.set(id, mode); else failFor.delete(id);
+    return send(res, 200, { sub, mode: failFor.get(id) ?? null });
+   }
    if (req.method === 'POST' && url.pathname === '/dev/reset-stats') { stats.toolCalls = 0; stats.protocolCalls = 0; return send(res, 200, stats); }
    // Development controls for tests.
    if (req.method === 'POST' && url.pathname === '/dev/drop-next-token-response') { dropNextTokenResponse = true; return send(res, 200, { ok: true }); }

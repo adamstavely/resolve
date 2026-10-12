@@ -98,6 +98,7 @@ test('a tenant account belonging to a different IdP identity is refused', async 
  await ctx.clearCookies();
  await signInAs(page, 'Sam Duplicate');
  await expect(page.getByText('Signed in as Sam Duplicate')).toBeVisible();
+ await disconnect(page, 'payroll');
  // The browser's IdP session is now Olive's while Resolve's session is Sam Duplicate's.
  await ctx.addCookies([oliveIdp]);
  await page.goto('/api/connect/payroll/start');

@@ -5,7 +5,7 @@ const tags = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 const status = (page: Page) => page.getByRole('status').filter({ hasText: /Form|No values|Draft/ });
 
 test.beforeEach(async ({ page }) => {
- await page.goto('/');
+ await page.goto('/components');
  await expect(page.getByLabel('Application name')).toBeVisible();
 });
 
