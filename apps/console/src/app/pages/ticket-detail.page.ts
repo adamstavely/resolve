@@ -6,6 +6,7 @@ import { IconComponent } from '../icon.component';
 import { api, AppState, fullTime, relativeTime } from '../state';
 import { ThreadComponent } from './thread.component';
 import { ComposerComponent } from './composer.component';
+import { SystemContextComponent } from './system-context.component';
 import { MessageSender, postAction } from '../actions';
 import { RESOLVE_ELEMENTS, ResolveConfirmDialog } from '../elements';
 
@@ -15,10 +16,12 @@ function focusHeadingAfterLoad() {
 }
 
 type Detail = z.infer<typeof ticketDetailResponseSchema>['detail'];
+/** The requester's name as the thread shows it (the ticket DTO carries only their principal id). */
+const requesterName = (d: Detail) => d.messages.find(m => m.senderType === 'visitor')?.authorName ?? null;
 
 @Component({
  selector: 'rs-ticket-detail-page',
- imports: [RouterLink, IconComponent, ThreadComponent, ComposerComponent, ...RESOLVE_ELEMENTS],
+ imports: [RouterLink, IconComponent, ThreadComponent, ComposerComponent, SystemContextComponent, ...RESOLVE_ELEMENTS],
  schemas: [CUSTOM_ELEMENTS_SCHEMA],
  template: `
 <div class="page">
@@ -73,6 +76,10 @@ type Detail = z.infer<typeof ticketDetailResponseSchema>['detail'];
     }
    </aside>
   </div>
+  @if (state.can('observability.subject')) {
+   <rs-system-context [appKey]="app()" kind="ticket" [objectId]="id()" [appName]="state.appName(app())" [messages]="d.messages"
+    [customer]="{ name: customerName(d), email: null }" />
+  }
  } @else if (error()) {
   <header class="page-head"><h1 class="page-title" tabindex="-1">Ticket unavailable</h1></header>
   <p class="notice" data-tone="destructive" role="alert">{{ error() }}</p>
@@ -86,6 +93,7 @@ type Detail = z.infer<typeof ticketDetailResponseSchema>['detail'];
 </div>`,
 })
 export class TicketDetailPage {
+ readonly customerName = requesterName;
  readonly app = input.required<string>();
  readonly id = input.required<string>();
  readonly state = inject(AppState);

@@ -115,3 +115,45 @@ describe('mapping preview and isolation', () => {
   expect((await runIsolation(client(), payroll, [])).passed).toBe(true);
  });
 });
+
+describe('customer context (E2)', () => {
+ const issue = (over: Partial<import('../packages/contracts/src').KnownIssue> = {}): import('../packages/contracts/src').KnownIssue => ({
+  id: '00000000-0000-4000-8000-0000000000aa', appKey: 'payroll', environment: 'production', kind: 'alert', providerId: 'a1', title: 'payroll-api 5xx',
+  state: 'active', since: new Date(Date.now() - 25 * 60_000).toISOString(), lastSeenAt: new Date().toISOString(), service: 'payroll-api', affected: null, linkedTickets: 0, ...over,
+ });
+ const ev = (minutesAgo: number, service = 'payroll-api', kind: 'error' | 'transaction' = 'error') => ({
+  at: new Date(Date.now() - minutesAgo * 60_000).toISOString(), source: 'APM' as const, kind, service, name: 'x', outcome: 'failure' as const, httpStatus: 502, durationMs: null, traceId: 't', transactionId: null, region: null,
+ });
+ test("an issue matches on service and time; time overlap alone is stated, never called a cause", async () => {
+  const { matchIssues } = await import('../apps/api/lib/integrations/subject');
+  const [m] = matchIssues([issue()], [ev(12), ev(14), ev(60), ev(5, 'notification-service')], true);
+  expect(m).toMatchObject({ customerErrorsInWindow: 2, matched: ['Same application', 'Service payroll-api', "2 of this customer's errors since it began"], missing: [] });
+  const [none] = matchIssues([issue()], [ev(60)], true);
+  expect(none.missing).toEqual(['No errors from this customer since it began']);
+  const [unverified] = matchIssues([issue({ kind: 'case', service: null })], [], false);
+  expect(unverified.missing).toEqual(['The source does not name a service', "This customer's own errors (the application did not identify them)"]);
+ });
+});
+
+describe('evidence snapshots (E2)', () => {
+ test('a viewer without the investigator role sees restricted items counted, not shown; the hash is re-verified', async () => {
+  const { snapshotView } = await import('../apps/api/lib/integrations/evidence');
+  const { canonicalJson } = await import('../packages/contracts/src');
+  const { createHash } = await import('node:crypto');
+  const facts = { health: null, issues: [], events: [], lastSession: null, synthetics: [], alreadyTried: [],
+   restricted: { logs: [{ at: new Date().toISOString(), level: 'error', service: 'payroll-api', message: 'upstream reset', traceId: null }], traces: [{ traceId: 'abc', transactionId: null, at: new Date().toISOString() }] } };
+  const row = {
+   id: '00000000-0000-4000-8000-0000000000bb', previous_id: null, app_key: 'payroll', environment: 'production', object_kind: 'ticket' as const, object_id: 't1', subject_ref: null,
+   requested_from: new Date(), requested_to: new Date(), facts: { ...facts, subjectStatus: 'verified' as const }, completeness: 'complete' as const, classification: 'restricted' as const,
+   content_hash: createHash('sha256').update(canonicalJson(facts)).digest('hex'), created_by: 'u', captured_at: new Date(), expires_at: new Date(), note_operation_key: null, note_state: null, display_name: 'Ivy',
+  };
+  const investigator = snapshotView(row, true);
+  expect(investigator).toMatchObject({ hashVerified: true, hiddenRestricted: 0 });
+  expect(investigator.facts.restricted.logs).toHaveLength(1);
+  const agent = snapshotView(row, false);
+  expect(agent).toMatchObject({ hashVerified: true, hiddenRestricted: 2, subjectStatus: 'verified' });
+  expect(agent.facts.restricted).toEqual({ logs: [], traces: [] });
+  // Tampering with stored facts is detected on view.
+  expect(snapshotView({ ...row, facts: { ...row.facts, events: [{ ...facts.restricted.traces[0] } as never] } }, true).hashVerified).toBe(false);
+ });
+});

@@ -39,7 +39,7 @@ Travel Desk) through the mock fleet worker; **People and roles** manages bundles
 dispatcher (`npm run dev:jobs`) and a mock Elastic Cloud Hosted 9.x (`npm run dev:elastic`: Elasticsearch on 3400, Kibana on 3401).
 As Ada, **Administration → Integrations** adds an Elastic connection (keys in `tools/mock-elastic/keys.json`), tests what it can read, and maps
 applications to Elastic data (preview, isolation check, activate); the integration worker (`npm run dev:integrations`) then polls health, which
-Home shows under **Service health** and **Known issues**.
+Home shows on the application cards and under **Known issues**. Tickets and conversations show **System context** (sign in as Ivy Investigator for trace ids and logs).
 `npm run elastic:fixtures -- --mock` re-records the adapter's contract fixtures. Stream load test: `npm run load:stream -- --sessions 100` (see phase 3 evidence).
 
 ```sh
@@ -52,7 +52,7 @@ QUACKBACK_SRC=../quackback npm run test:contract   # tool inventory vs. the pinn
 Evidence: [component gate](docs/evidence/phase-0-component-gate.md),
 [contracts and tool inventory](docs/evidence/phase-0-contracts.md), [identity and connections](docs/evidence/phase-1-identity.md), [fleet read](docs/evidence/phase-2-fleet-read.md), [operator actions](docs/evidence/phase-3-operator-actions.md),
 [fleet administration](docs/evidence/phase-4-fleet-administration.md), [banner broadcasts](docs/evidence/phase-5-banner-broadcasts.md),
-[Elastic E0](docs/evidence/elastic-e0-contracts-connections.md), [Elastic E1](docs/evidence/elastic-e1-health-known-issues.md).
+[Elastic E0](docs/evidence/elastic-e0-contracts-connections.md), [Elastic E1](docs/evidence/elastic-e1-health-known-issues.md), [Elastic E2](docs/evidence/elastic-e2-customer-context-evidence.md).
 
 `/api/readiness` reports ready only when the API has `DATABASE_URL` and the latest migration is applied.
 

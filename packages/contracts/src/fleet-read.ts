@@ -40,6 +40,7 @@ export const targetToolArgs = {
  get_support_dashboard: z.strictObject({ warningHorizonMinutes: z.number().int().min(5).max(1440).optional() }),
  list_support_activity: z.strictObject({ cursor: z.string().max(500).optional(), limit: z.number().int().min(1).max(50).optional() }),
  get_my_tier: z.strictObject({}),
+ get_customer_identity: z.union([z.strictObject({ conversationId: z.string().min(1).max(200) }), z.strictObject({ ticketId: z.string().min(1).max(200) })]),
 };
 
 const ticketSummary = toolResults.list_tickets.shape.tickets.element.extend({ assigneeName: z.string().nullable(), teamName: z.string().nullable() });
@@ -90,6 +91,11 @@ export const targetToolResults = {
  list_support_activity: z.object({ entries: z.array(activityEntry), nextCursor: z.string().nullable(), coverageSince: ts }),
  /** QB-TIER-1 (target): the caller's effective support tier in this application; null when they are not on a tier team. */
  get_my_tier: z.object({ tier: z.union([z.literal(1), z.literal(2), z.literal(3)]).nullable() }),
+ /** QB-OBS-1 (target): only the signed-identify id is ever returned as verified. */
+ get_customer_identity: z.discriminatedUnion('verified', [
+  z.object({ verified: z.literal(true), externalId: z.string().min(1).max(255) }),
+  z.object({ verified: z.literal(false), externalId: z.null() }),
+ ]),
 };
 /** Optional: a tenant that does not advertise it simply has no clearance to show (not an incompatibility). */
 export const CLEARANCE_TOOL_VERSION = 1; // get_my_tier, QB-TIER-1

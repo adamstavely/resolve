@@ -1,6 +1,7 @@
 import type { Routes } from '@angular/router';
 import { AppPage } from './pages/app.page';
 import { AuditPage } from './pages/audit.page';
+import { EvidencePage } from './pages/evidence.page';
 import { AppAdminPage } from './pages/app-admin.page';
 import { BroadcastPage } from './pages/broadcast.page';
 import { BroadcastsPage } from './pages/broadcasts.page';
@@ -24,6 +25,7 @@ export const routes: Routes = [
  { path: 'conversations', redirectTo: 'inbox' },
  { path: 'conversations/:app/:id', redirectTo: 'inbox/:app/:id' },
  { path: 'apps/:appKey', component: AppPage, title: 'Application · Resolve' },
+ { path: 'evidence/:id', component: EvidencePage, title: 'Evidence snapshot · Resolve' },
  { path: 'tickets', component: TicketsPage, title: 'Tickets · Resolve' },
  { path: 'tickets/:app/:id', component: TicketDetailPage, title: 'Ticket · Resolve' },
  { path: 'audit', component: AuditPage, title: 'Audit · Resolve' },

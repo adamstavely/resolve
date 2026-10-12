@@ -26,6 +26,8 @@ const ACTION_LABELS: Record<string, string> = {
  'observability.mapping_state': 'Activated or disabled an Elastic mapping', 'observability.issue_link': 'Linked tickets to a known issue',
  'read.observability_health': 'Viewed service health', 'read.observability_issues': 'Viewed known issues', 'read.observability_stream': 'Started live service health',
  'read.issue_candidates': 'Reviewed tickets for a known issue',
+ 'read.observability_subject': 'Viewed customer context', 'observability.restricted_read': 'Read trace ids or log lines', 'observability.snapshot_capture': 'Captured an evidence snapshot',
+ 'read.snapshot': 'Viewed an evidence snapshot', 'read.snapshot_export': 'Exported an evidence snapshot', 'read.clearance': 'Checked support tiers',
 };
 
 @Component({

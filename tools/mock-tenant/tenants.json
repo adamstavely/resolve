@@ -171,6 +171,17 @@
    "role": "portal",
    "teams": [],
    "announcements": true
+  },
+  "mock|ivy": {
+   "role": "agent",
+   "teams": [
+    "support",
+    "billing"
+   ],
+   "tiers": {
+    "payroll": 3,
+    "hr": 2
+   }
   }
  },
  "_comment": "Development fixture. people: tenant role and teams per IdP subject (anyone else is a portal user with no team access). roles: per-tenant role override (Bo is an observer in HR, so HR refuses his writes even though Resolve allows them). Travel Desk is a managed instance that is not bound to Resolve yet (adoption, plan 07): it has no Resolve OAuth client and allows anonymous actions, which the adoption report shows but does not change. Bea manages announcements without a staff role; Payroll and Legal Ops have the banner embed installed, HR does not."

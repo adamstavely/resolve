@@ -8,7 +8,7 @@ const RULES: [RegExp, string][] = [
  // Credentials and tokens.
  [/\b(?:Bearer|ApiKey|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi, '[credential]'],
  [/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, '[token]'],
- [/\b(password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|session|cookie|authorization)\s*[=:]\s*(?:"[^"]*"|'[^']*'|[^\s,;&)\]'"]+)/gi, '$1=[redacted]'],
+ [/\b(password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|session|cookie|authorization)\s*[=:]\s*(?!\[)(?:"[^"]*"|'[^']*'|[^\s,;&)\]'"]+)/gi, '$1=[redacted]'],
  [/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g, '[credential]'],
  [/\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{8,}\b/g, '[credential]'],
  // Contact details: email, and international-format phone numbers.
@@ -18,7 +18,7 @@ const RULES: [RegExp, string][] = [
  [/\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){3,7}(?:\s?[A-Z0-9]{1,3})?\b/g, '[account]'],
 ];
 
-const CARD_CANDIDATE = /\b(?:\d[ -]?){13,19}\b/g;
+const CARD_CANDIDATE = /\b\d(?:[ -]?\d){12,18}\b/g;
 
 function luhn(digits: string) {
  let sum = 0; let double = false;

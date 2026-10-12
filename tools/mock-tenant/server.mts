@@ -26,7 +26,7 @@ const ctx: FleetContext = {
  idp: new URL(required('OIDC_ISSUER')).origin,
  resolveRedirect: `${new URL(required('RESOLVE_ORIGIN')).origin}/api/connect/callback`,
  people: fleetConfig.people,
- names: { 'mock|ada': 'Ada Admin', 'mock|sam': 'Sam Agent', 'mock|olive': 'Olive Observer', 'mock|bo': 'Bo Blockable', 'mock|sam-imposter': 'Sam Duplicate' },
+ names: { 'mock|ada': 'Ada Admin', 'mock|sam': 'Sam Agent', 'mock|ivy': 'Ivy Investigator', 'mock|olive': 'Olive Observer', 'mock|bo': 'Bo Blockable', 'mock|sam-imposter': 'Sam Duplicate' },
 };
 const registryToken = required('REGISTRY_TOKEN');
 const workerToken = required('WORKER_TOKEN');

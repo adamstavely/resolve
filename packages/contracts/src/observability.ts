@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { appKeySchema, failureCodeSchema, isoDateTimeSchema, uuidSchema } from './common';
+import { appKeySchema, failureCodeSchema, isoDateTimeSchema, sha256HexSchema, uuidSchema } from './common';
 
 /*
  * Elastic Observability integration (plan 12, plan 14). Resolve-normalized DTOs, not Elastic's wire shapes: the
@@ -332,3 +332,77 @@ export const observabilityEventSchema = z.discriminatedUnion('type', [
  z.strictObject({ type: z.literal('issues'), appKey: appKeySchema, environment: z.string(), at: isoDateTimeSchema }),
 ]);
 export type ObservabilityEvent = z.infer<typeof observabilityEventSchema>;
+
+// ── E2: customer context and evidence snapshots ──
+
+export const SUBJECT_STATUS = ['verified', 'unverified', 'not_reported', 'not_mapped', 'policy_none', 'unavailable'] as const;
+export type SubjectStatus = (typeof SUBJECT_STATUS)[number];
+
+export const subjectLogSchema = z.strictObject({
+ at: isoDateTimeSchema, level: z.string().max(20).nullable(), service: z.string().nullable(),
+ /** Redacted before it leaves the server. */
+ message: z.string().max(500), traceId: z.string().nullable(),
+});
+export type SubjectLog = z.infer<typeof subjectLogSchema>;
+
+export const matchedIssueSchema = z.strictObject({
+ issueId: uuidSchema, title: z.string(), kind: z.enum(['alert', 'case']), providerId: z.string(), since: isoDateTimeSchema,
+ /** Criteria that held, and those that could not be checked or did not hold. Time overlap alone is not causation. */
+ matched: z.array(z.string()), missing: z.array(z.string()),
+ /** This customer's events (errors) on the issue's service since it began. */
+ customerErrorsInWindow: z.number().int().nonnegative(),
+});
+export type MatchedIssue = z.infer<typeof matchedIssueSchema>;
+
+export const subjectContextSchema = z.strictObject({
+ appKey: appKeySchema,
+ objectKind: z.enum(['ticket', 'conversation']),
+ objectId: z.string(),
+ subject: z.strictObject({ status: z.enum(SUBJECT_STATUS), externalId: z.string().nullable() }),
+ window: z.strictObject({ from: isoDateTimeSchema, to: isoDateTimeSchema }),
+ fetchedAt: isoDateTimeSchema,
+ completeness: z.enum(COMPLETENESS),
+ missing: z.array(z.enum(ELASTIC_FAMILIES)),
+ /** Whether trace ids, log lines and Kibana links were included (observability.restricted). */
+ restricted: z.boolean(),
+ events: z.array(subjectEventSchema),
+ logs: z.array(subjectLogSchema),
+ lastSession: z.strictObject({ region: z.string(), at: isoDateTimeSchema }).nullable(),
+ synthetics: z.array(syntheticResultSchema),
+ matchedIssues: z.array(matchedIssueSchema),
+ /** APM sampling and RUM coverage are not complete records; the panel says so. */
+ coverage: z.string(),
+ kibanaTraceBase: z.string().nullable(),
+});
+export type SubjectContext = z.infer<typeof subjectContextSchema>;
+
+export const evidenceFactsSchema = z.strictObject({
+ health: appHealthSchema.nullable(),
+ issues: z.array(matchedIssueSchema),
+ events: z.array(subjectEventSchema),
+ lastSession: subjectContextSchema.shape.lastSession,
+ synthetics: z.array(syntheticResultSchema),
+ alreadyTried: z.array(z.strictObject({ at: isoDateTimeSchema, operation: z.string(), actor: z.string(), outcome: z.string() })),
+ /** Trace ids and log lines; shown only to observability.restricted. */
+ restricted: z.strictObject({ logs: z.array(subjectLogSchema), traces: z.array(z.strictObject({ traceId: z.string(), transactionId: z.string().nullable(), at: isoDateTimeSchema })) }),
+});
+export type EvidenceFacts = z.infer<typeof evidenceFactsSchema>;
+
+export const evidenceSnapshotSchema = z.strictObject({
+ id: uuidSchema, previousId: uuidSchema.nullable(),
+ appKey: appKeySchema, environment: z.string(), objectKind: z.enum(['ticket', 'conversation']), objectId: z.string(),
+ subjectStatus: z.enum(SUBJECT_STATUS),
+ requested: z.strictObject({ from: isoDateTimeSchema, to: isoDateTimeSchema }),
+ capturedAt: isoDateTimeSchema, capturedBy: z.string(), expiresAt: isoDateTimeSchema,
+ completeness: z.enum(COMPLETENESS), classification: z.enum(['service', 'subject', 'restricted']),
+ contentHash: sha256HexSchema,
+ /** Recomputed on every view: the stored facts still produce the recorded hash. Consistency, not truth. */
+ hashVerified: z.boolean(),
+ facts: evidenceFactsSchema,
+ /** Restricted items exist but this viewer may not see them. */
+ hiddenRestricted: z.number().int().nonnegative(),
+ note: z.strictObject({ state: z.enum(['pending', 'succeeded', 'failed', 'uncertain']).nullable(), operationId: uuidSchema.nullable() }),
+});
+export type EvidenceSnapshot = z.infer<typeof evidenceSnapshotSchema>;
+export const evidenceCaptureSchema = z.strictObject({ requestId: uuidSchema, previousId: uuidSchema.optional() });
+

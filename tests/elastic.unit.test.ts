@@ -182,6 +182,10 @@ describe('redaction (plan 12 §8)', () => {
   expect(s).toContain('order 1234567890123'); // not Luhn-valid: not a card
   expect(s).toContain('token=[redacted]');
  });
+ test('an already-redacted value is left alone, and surrounding text keeps its spacing', () => {
+  expect(redactText('retrying with Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJlMTIz card 4111 1111 1111 1111 for a@b.test'))
+   .toBe('retrying with Authorization: [credential] card [card] for [email]');
+ });
  test('bounded length and control characters; ids must be simple tokens', () => {
   expect(redactText('a'.repeat(900), 100)).toHaveLength(100);
   expect(redactText('line\u0000\u001b[31mred')).toBe('line[31mred');

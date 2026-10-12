@@ -9,6 +9,7 @@ import { InboxService, rowFromDetail, type ConversationDetail, type MonitorApp, 
 import { api, AppState, fullTime, relativeTime, UNAVAILABLE_TEXT } from '../state';
 import { ComposerComponent } from './composer.component';
 import { ThreadComponent } from './thread.component';
+import { SystemContextComponent } from './system-context.component';
 
 type Status = 'open' | 'snoozed' | 'closed' | 'all';
 const pageSchema = targetToolResults.list_conversations.extend({ appKey: z.string() });
@@ -26,7 +27,7 @@ const MONITOR_LABELS: Record<MonitorApp['state'], string> = {
  */
 @Component({
  selector: 'rs-inbox-page',
- imports: [IconComponent, ThreadComponent, ComposerComponent, ...RESOLVE_ELEMENTS],
+ imports: [IconComponent, ThreadComponent, ComposerComponent, SystemContextComponent, ...RESOLVE_ELEMENTS],
  schemas: [CUSTOM_ELEMENTS_SCHEMA],
  template: `
 <div class="page inbox-page">
@@ -132,6 +133,10 @@ const MONITOR_LABELS: Record<MonitorApp['state'], string> = {
    }
   </section>
  </div>
+ @if (state.can('observability.subject') && selected() && detail(); as d) {
+  <rs-system-context [appKey]="selected()!.appKey" kind="conversation" [objectId]="selected()!.id" [appName]="state.appName(selected()!.appKey)"
+   [messages]="d.messages" [customer]="{ name: d.conversation.visitorName ?? null, email: d.conversation.visitorEmail ?? null }" />
+ }
 
  <resolve-confirm-dialog #closeDialogRef tone="destructive" heading="Close this conversation?"
   description="The customer's chat is marked resolved in the application. A new customer message reopens it."

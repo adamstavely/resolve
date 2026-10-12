@@ -1,6 +1,6 @@
 import {
- alertResultSchema, caseResultSchema, sloResultSchema, subjectEventSchema, syntheticResultSchema,
- type AlertResult, type CaseResult, type ElasticAppMapping, type ElasticFamily, type FamilyStatus, type SloResult, type SubjectEvent, type SyntheticResult,
+ alertResultSchema, caseResultSchema, sloResultSchema, subjectEventSchema, subjectLogSchema, syntheticResultSchema,
+ type AlertResult, type CaseResult, type ElasticAppMapping, type ElasticFamily, type FamilyStatus, type SloResult, type SubjectEvent, type SubjectLog, type SyntheticResult,
 } from '@resolve/contracts';
 import { ElasticClient, ElasticError } from './client';
 import { redactText, safeId } from './redact';
@@ -279,4 +279,17 @@ export async function fetchRecentRuns(client: ElasticClient, patterns: readonly 
   return { monitorId: safeId(first(f, 'monitor.id')), name: redactText(first<string>(f, 'monitor.name'), 200), location: first(f, 'observer.geo.name'),
    status: first(f, 'monitor.status'), durationMs: typeof us === 'number' ? Math.round(us / 1000) : null, checkedAt: iso(first(f, '@timestamp')) };
  }));
+}
+
+/** Restricted drilldown (E2): this subject's log lines on the mapped services, redacted before they leave the adapter. */
+export async function fetchSubjectLogs(client: ElasticClient, patterns: readonly string[], subject: string, services: ElasticAppMapping['services'], w: Window, size = 20): Promise<Parsed<SubjectLog>> {
+ if (patterns.length === 0) return { items: [], dropped: 0 };
+ const r = await client.es<SearchBody>('POST', `/${indexList(patterns)}/_search`, {
+  size: Math.min(size, 50), track_total_hits: false, _source: false, fields: ['@timestamp', 'log.level', 'service.name', 'message', 'trace.id'], sort: [{ '@timestamp': 'desc' }],
+  query: { bool: { filter: [{ term: { 'user.id': subject } }, serviceFilter(services), range(w)] } },
+ });
+ return keep(subjectLogSchema, r.body.hits.hits.map(h => ({
+  at: iso(first(h.fields, '@timestamp')), level: first<string>(h.fields, 'log.level')?.slice(0, 20) ?? null, service: first(h.fields, 'service.name') ?? null,
+  message: redactText(first<string>(h.fields, 'message') ?? '', 500) ?? '', traceId: safeId(first(h.fields, 'trace.id')),
+ })));
 }

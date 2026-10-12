@@ -1,6 +1,7 @@
 [
  { "sub": "mock|ada", "name": "Ada Admin", "email": "ada@example.test", "groups": ["resolve-admins"] },
  { "sub": "mock|sam", "name": "Sam Agent", "email": "sam@example.test", "groups": ["resolve-agents"] },
+ { "sub": "mock|ivy", "name": "Ivy Investigator", "email": "ivy@example.test", "groups": ["resolve-agents", "resolve-investigators"] },
  { "sub": "mock|olive", "name": "Olive Observer", "email": "olive@example.test", "groups": ["resolve-observers"] },
  { "sub": "mock|bea", "name": "Bea Broadcaster", "email": "bea@example.test", "groups": ["resolve-announcements"] },
  { "sub": "mock|nina", "name": "Nina No Groups", "email": "nina@example.test", "groups": [] },
