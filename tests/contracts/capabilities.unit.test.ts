@@ -25,8 +25,9 @@ describe('capability catalogue', () => {
   expect([...caps].filter(c => CAPABILITIES[c].kind !== 'read' && c !== 'connection.manage')).toEqual([]);
  });
 
- test('agent scopes are bounded to chat; broadcast authors need the proposed announcement scopes', () => {
-  expect(scopesFor(capabilitiesFor(['fleet-agent']))).toEqual(['read:chat', 'write:chat']);
+ test('agent scopes are chat plus announcements (Tier 1+ banners, owner decision 2026-10-12); observers stay read-only', () => {
+  expect(scopesFor(capabilitiesFor(['fleet-agent']))).toEqual(['read:announcement', 'read:chat', 'write:announcement', 'write:chat']);
+  expect(scopesFor(capabilitiesFor(['fleet-observer']))).toEqual(['read:chat']);
   expect(scopesFor(capabilitiesFor(['announcement-author']))).toEqual(['read:announcement', 'write:announcement']);
  });
 
@@ -77,7 +78,8 @@ describe('capability catalogue', () => {
    'ticket.note': ['QB-CHAT-6', 'QB-FILE-2'],
    'ticket.assign': ['QB-TICKET-2'],
    'ticket.status': ['QB-TICKET-2'],
-   'broadcast.publish': ['QB-ANN-1', 'QB-ANN-2'],
+   'broadcast.publish': ['QB-ANN-1', 'QB-ANN-2', 'QB-ANN-3'],
+   'broadcast.app': ['QB-ANN-1', 'QB-ANN-2', 'QB-ANN-3'],
    // Customer-level Elastic context needs the verified external id (plan 14); service health needs no tenant tool.
    'observability.subject': ['QB-OBS-1'],
    'observability.link': ['QB-CHAT-1', 'QB-CHAT-6'],

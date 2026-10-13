@@ -21,7 +21,7 @@ async function signedIn(browser: Browser, name: string, connect: string[] = []) 
  const ctx = await browser.newContext({ baseURL: ORIGIN });
  const page = await ctx.newPage();
  await signInAs(page, name);
- await expect(page.getByText(`Signed in as ${name}`)).toBeVisible();
+ await expect(page.getByRole('button', { name: `${name}, account and availability` })).toBeVisible();
  for (const app of connect) {
   await page.goto(`/api/connect/${app}/start`);
   await expect(page.locator('p.notice')).toContainText('Connected to');
@@ -66,11 +66,14 @@ test("an agent sees the customer's system context beside the ticket, as on the p
  const t = await ticketFor(sam, 1);
  await sam.goto(`/tickets/payroll/${t.id}`);
  const ctx = sam.getByRole('region', { name: 'System context' });
- await expect(ctx).toContainText('matched on user.id cust-1');
+ await expect(ctx).toContainText('cust-1');
+ await expect(ctx).toContainText('Verified customer');
  const incident = ctx.getByRole('region', { name: 'Active incident' });
  await expect(incident).toContainText('Known issue affecting this customer');
  await expect(incident).toContainText(/2 of this customer's errors fall inside this issue's window/);
  await expect(incident).toContainText('About 18 customers affected so far (approximate)');
+ // Prototype v2: the systems detail is on the Systems tab, the timeline on Activity.
+ await ctx.getByRole('tab', { name: /Systems/ }).click();
  const saw = ctx.getByRole('region', { name: 'What the systems saw' });
  await expect(saw).toContainText('upstream connect error or disconnect/reset before headers');
  await expect(saw).toContainText('Page load /payslips');
@@ -81,6 +84,7 @@ test("an agent sees the customer's system context beside the ticket, as on the p
  await expect(us).toContainText('failing for everyone. That points to the service, not this account.');
  await expect(ctx).toContainText('Trace IDs, log patterns, log lines and Kibana links appear for investigators');
  // The timeline toggle hides system events.
+ await ctx.getByRole('tab', { name: 'Activity' }).click();
  const activity = ctx.getByRole('region', { name: 'Recent activity' });
  await expect(activity.getByText('APM', { exact: true }).first()).toBeVisible();
  await activity.getByRole('button', { name: 'Customer only' }).click();
@@ -95,8 +99,9 @@ test('an unidentified customer gets service-level context only, with the reason'
  await sam.goto(`/tickets/payroll/${t.id}`);
  const ctx = sam.getByRole('region', { name: 'System context' });
  await expect(ctx).toContainText('Payroll did not identify this customer, so only service-level context is shown.');
+ await expect(ctx).toContainText('No verified customer id');
+ await ctx.getByRole('tab', { name: /Systems/ }).click();
  await expect(ctx).toContainText('Customer events need a verified customer id.');
- await expect(ctx).not.toContainText('matched on user.id');
  await sam.context().close();
 });
 
@@ -104,10 +109,12 @@ test('capturing a snapshot records what the agent saw and posts an internal note
  const sam = await signedIn(browser, 'Sam Agent', ['payroll']);
  const t = await ticketFor(sam, 1);
  await sam.goto(`/tickets/payroll/${t.id}`);
- const ctx = sam.getByRole('region', { name: 'System context' });
- await ctx.getByRole('button', { name: 'Capture evidence snapshot' }).click();
- await expect(ctx.getByRole('status').filter({ hasText: 'Snapshot captured, and an internal note links to it.' })).toBeVisible();
- await ctx.getByRole('link', { name: 'View the snapshot' }).click();
+ // Prototype v2: capture is a tool on the case's rail; the drawer confirms it.
+ await sam.getByRole('complementary', { name: /tools$/ }).getByRole('button', { name: 'Capture evidence snapshot' }).click();
+ const drawer = sam.getByRole('dialog', { name: 'Capture evidence snapshot' });
+ await drawer.getByRole('button', { name: 'Capture snapshot' }).click();
+ await expect(drawer).toContainText('Snapshot captured, and an internal note links to it.');
+ await drawer.getByRole('link', { name: 'View the snapshot' }).click();
  await expect(sam).toHaveURL(/\/evidence\//);
  await expect(sam.getByText('Unchanged since capture')).toBeVisible();
  const ev = sam.getByRole('region', { name: 'Evidence snapshot' });
@@ -134,6 +141,7 @@ test('an investigator sees trace ids, Kibana links and redacted log lines; their
  const t = await ticketFor(ivy, 1);
  await ivy.goto(`/tickets/payroll/${t.id}`);
  const ctx = ivy.getByRole('region', { name: 'System context' });
+ await ctx.getByRole('tab', { name: /Systems/ }).click();
  await expect(ctx.getByRole('region', { name: 'What the systems saw' })).toContainText('trace.id');
  await expect(ctx.getByRole('link', { name: /Open trace in Kibana/ }).first()).toHaveAttribute('href', /^https:\/\/kibana\.corp\.internal\/app\/apm\/link-to\/trace\//);
  const logs = ctx.getByRole('region', { name: /Log lines/ });
@@ -141,8 +149,10 @@ test('an investigator sees trace ids, Kibana links and redacted log lines; their
  await expect(logs).toContainText('[credential]');
  await expect(logs).not.toContainText('eyJhbGci');
  await expect(logs).not.toContainText('4111');
- await ctx.getByRole('button', { name: 'Capture evidence snapshot' }).click();
- await ctx.getByRole('link', { name: 'View the snapshot' }).click();
+ await ivy.getByRole('complementary', { name: /tools$/ }).getByRole('button', { name: 'Capture evidence snapshot' }).click();
+ const drawer = ivy.getByRole('dialog', { name: 'Capture evidence snapshot' });
+ await drawer.getByRole('button', { name: 'Capture snapshot' }).click();
+ await drawer.getByRole('link', { name: 'View the snapshot' }).click();
  await expect(ivy.getByRole('region', { name: 'Snapshot record' })).toContainText('Restricted');
  const id = ivy.url().split('/evidence/')[1];
  const exported = await ivy.request.get(`/api/evidence/${id}?download=1`);

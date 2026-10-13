@@ -45,6 +45,8 @@ export const CAPABILITIES = {
  'app.lifecycle': { summary: 'Suspend and resume instances', kind: 'administration', confirmation: 'confirm', tools: [], jobs: ['suspend', 'resume'], phase: 4 },
  'roles.manage': { summary: 'Role bundles and per-app team mappings', kind: 'administration', confirmation: 'review', tools: [], jobs: ['apply_entitlements'], phase: 4 },
  'broadcast.publish': { summary: 'Publish Everyone banners to all or selected apps', kind: 'mutation', confirmation: 'review', tools: ['list_announcements', 'upsert_announcement', 'archive_announcement', 'get_announcement_by_key'], jobs: [], phase: 5 },
+ /** Owner decision 2026-10-12: Tier 1 or higher in an application (as it reports, QB-TIER-1) is enough to banner that application. */
+ 'broadcast.app': { summary: 'Publish Everyone banners to applications where you hold Tier 1 or higher', kind: 'mutation', confirmation: 'review', tools: ['list_announcements', 'upsert_announcement', 'archive_announcement', 'get_announcement_by_key'], jobs: [], phase: 5 },
  // Elastic Observability (plan 12, plan 14). Capabilities, not the prototype's tiers (owner decision 2026-10-12).
  'observability.health': { summary: 'See app health, SLOs, alerts, synthetics and known issues from Elastic', kind: 'read', confirmation: 'none', tools: [], jobs: [], phase: 'E1' },
  'observability.subject': { summary: "See one customer's service context inside a ticket or conversation you can read", kind: 'read', confirmation: 'none', tools: ['get_customer_identity'], jobs: [], phase: 'E2' },
@@ -65,7 +67,7 @@ export type CapabilityId = keyof typeof CAPABILITIES;
 export const BUNDLES = {
  'fleet-admin': Object.keys(CAPABILITIES) as CapabilityId[],
  'fleet-agent': ['fleet.view', 'connection.manage', 'dashboard.view', 'chat.read', 'chat.reply', 'chat.note', 'chat.assign', 'chat.status', 'chat.mark_read', 'chat.availability', 'ticket.read', 'ticket.reply', 'ticket.note', 'ticket.assign', 'ticket.status',
-  'observability.health', 'observability.subject', 'observability.link'],
+  'observability.health', 'observability.subject', 'observability.link', 'broadcast.app'],
  'fleet-observer': ['fleet.view', 'connection.manage', 'dashboard.view', 'chat.read', 'ticket.read', 'observability.health'],
  'announcement-author': ['fleet.view', 'connection.manage', 'broadcast.publish'],
  /** Restricted evidence (plan 14): added alongside an agent bundle, never on its own for customer data. */

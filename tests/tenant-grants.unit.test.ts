@@ -37,7 +37,8 @@ describe('tenant scopes follow capabilities', () => {
  test('proposed scopes are requested once the tenant advertises them, and only for capabilities that need them', () => {
   const advertised = ['openid', 'read:chat', 'write:chat', 'read:announcement', 'write:announcement'];
   expect(tenantScopes(capabilitiesFor(['announcement-author']), advertised)).toEqual(['openid', 'offline_access', 'read:announcement', 'write:announcement']);
-  expect(tenantScopes(capabilitiesFor(['fleet-agent']), advertised)).toEqual(['openid', 'offline_access', 'read:chat', 'write:chat']);
+  expect(tenantScopes(capabilitiesFor(['fleet-agent']), advertised)).toEqual(['openid', 'offline_access', 'read:announcement', 'read:chat', 'write:announcement', 'write:chat']);
+  expect(tenantScopes(capabilitiesFor(['fleet-agent']), ['openid', 'read:chat', 'write:chat'])).toEqual(['openid', 'offline_access', 'read:chat', 'write:chat']);
  });
 });
 

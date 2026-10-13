@@ -11,7 +11,7 @@ async function signedIn(browser: Browser, name: string) {
  const ctx = await browser.newContext({ baseURL: ORIGIN });
  const page = await ctx.newPage();
  await signInAs(page, name);
- await expect(page.getByText(`Signed in as ${name}`)).toBeVisible();
+ await expect(page.getByRole('button', { name: `${name}, account and availability` })).toBeVisible();
  return page;
 }
 const findUser = async (page: Page, q: string) => (await (await page.request.get('/api/admin/users?q=' + encodeURIComponent(q))).json()).users;
@@ -44,7 +44,7 @@ test('an admin blocks a person immediately and lifts the block; both are audited
   expect((await setAccess(ada, target.id, { enabled: true, reason: 'Laptop recovered' })).ok()).toBe(true);
  }
  await signInAs(bo, 'Bo Blockable');
- await expect(bo.getByText('Signed in as Bo Blockable')).toBeVisible();
+ await expect(bo.getByRole('button', { name: 'Bo Blockable, account and availability' })).toBeVisible();
 
  await ada.goto('/audit');
  await ada.getByLabel('Activity').selectOption('user');

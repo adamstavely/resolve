@@ -22,20 +22,20 @@ const NOTE_TEXT: Record<string, string> = { succeeded: 'Internal note added', pe
  selector: 'rs-evidence-page',
  imports: [IconComponent, RouterLink],
  template: `
-<div class="page">
+<div class="esc-page">
  @if (snap(); as s) {
-  <div class="row-wrap">
+  <div class="tags" style="gap:8px">
    <span class="lbl ev-eyebrow">Evidence snapshot</span>
    <span class="ev-badge" [attr.data-tone]="s.classification === 'restricted' ? 'destructive' : 'neutral'">{{ classText(s.classification) }}</span>
    <span class="ev-badge" [attr.data-tone]="s.hashVerified ? 'safe' : 'destructive'">{{ s.hashVerified ? 'Unchanged since capture' : 'Does not match its hash' }}</span>
   </div>
-  <h1 class="ev-title" tabindex="-1">{{ state.appName(s.appKey) }} {{ s.objectKind }}: evidence at {{ time(s.capturedAt) }}</h1>
+  <h1 class="esc-h1" style="font-size:28px;margin-top:10px" tabindex="-1">{{ state.appName(s.appKey) }} {{ s.objectKind }}: evidence at {{ time(s.capturedAt) }}</h1>
   <div class="ev-meta">{{ state.appName(s.appKey) }} · <a [routerLink]="itemLink(s)">Open the {{ s.objectKind }}</a> · captured by {{ s.capturedBy }} · {{ relativeTime(s.capturedAt) }} · {{ subjectText(s.subjectStatus) }}</div>
 
-  <div class="ctx-pair ev-cols">
-   <div class="ev-main">
-    <section class="card" aria-labelledby="ev-title">
-     <div class="card-head"><h2 class="card-title" id="ev-title"><rs-icon name="doc" [size]="15" />Evidence snapshot</h2><span class="mono ctx-meta">captured {{ fullTime(s.capturedAt) }} · window {{ fullTime(s.requested.from) }} to {{ fullTime(s.requested.to) }}</span></div>
+  <div class="ev-cols" style="display:flex;flex-wrap:wrap;gap:18px;margin-top:22px;align-items:flex-start">
+   <div class="ev-main" style="flex:1.6 1 520px;min-width:0;display:flex;flex-direction:column;gap:16px">
+    <section class="panel" aria-labelledby="ev-title">
+     <div class="ph2"><h2 class="pt2" id="ev-title"><rs-icon name="doc" [size]="15" />Evidence snapshot</h2><span class="mono ctx-meta">captured {{ fullTime(s.capturedAt) }} · window {{ fullTime(s.requested.from) }} to {{ fullTime(s.requested.to) }}</span></div>
 
      <div class="sec">
       <div class="sh"><span class="cite">1</span><b>Service health at time of capture</b><span class="src">ALERTS</span><span class="src">SLO</span><span class="src">SYNTHETICS</span></div>
@@ -89,9 +89,9 @@ const NOTE_TEXT: Record<string, string> = { succeeded: 'Internal note added', pe
     </section>
    </div>
 
-   <aside class="ev-side">
-    <section class="card ev-summary" aria-labelledby="sum-title">
-     <div class="card-head ev-summary-head"><h2 class="card-title" id="sum-title"><rs-icon name="doc" [size]="15" />Draft summary</h2><span class="lbl">AI assistant · internal model</span></div>
+   <aside class="ev-side" style="flex:1 1 330px;min-width:0;display:flex;flex-direction:column;gap:16px">
+    <section class="panel ev-summary" style="border-color:var(--accent-line)" aria-labelledby="sum-title">
+     <div class="ph2" style="background:var(--accent-soft)"><h2 class="pt2" id="sum-title"><rs-icon name="doc" [size]="15" />Draft summary</h2><span class="lbl">AI assistant · internal model</span></div>
      @if (summary(); as r) {
       @if (r.summary; as m) {
        @if (m.status === 'ready') {
@@ -123,8 +123,8 @@ const NOTE_TEXT: Record<string, string> = { succeeded: 'Internal note added', pe
      } @else { <p class="pad small muted" role="status">Loading…</p> }
      <p role="status" class="sr-only">{{ summaryStatus() }}</p>
     </section>
-    <section class="card" aria-labelledby="rec-title">
-     <div class="card-head"><h2 class="card-title" id="rec-title">Snapshot record</h2><span class="lbl">immutable</span></div>
+    <section class="panel" aria-labelledby="rec-title">
+     <div class="ph2"><h2 class="pt2" id="rec-title">Snapshot record</h2><span class="lbl">immutable</span></div>
      <dl class="facts pad">
       <div><dt>Completeness</dt><dd>{{ s.completeness }}</dd></div>
       <div><dt>Classification</dt><dd>{{ classText(s.classification) }}</dd></div>

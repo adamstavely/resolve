@@ -57,7 +57,7 @@ export class BroadcastsPage {
  constructor() {
   let started = false;
   effect(() => {
-   if (started || !this.state.can('broadcast.publish')) return;
+   if (started || !(this.state.can('broadcast.publish') || this.state.can('broadcast.app'))) return;
    started = true;
    untracked(() => api('/api/broadcasts', broadcastListSchema).then(r => this.list.set(r.broadcasts)).catch(e => this.error.set(e.message)).finally(() => this.loading.set(false)));
   });

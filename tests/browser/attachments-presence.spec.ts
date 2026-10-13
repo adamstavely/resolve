@@ -18,7 +18,7 @@ async function signedIn(browser: Browser, name: string) {
  const ctx = await browser.newContext({ baseURL: ORIGIN });
  const page = await ctx.newPage();
  await signInAs(page, name);
- await expect(page.getByText(`Signed in as ${name}`)).toBeVisible();
+ await expect(page.getByRole('button', { name: `${name}, account and availability` })).toBeVisible();
  await page.goto('/api/connect/payroll/start');
  await expect(page.locator('p.notice')).toContainText('Connected to');
  return page;
@@ -43,7 +43,7 @@ test('a reply carries an attachment uploaded through Resolve, and it downloads t
  const files = sam.getByRole('list', { name: /Files to attach/ });
  await expect(files).toContainText('error.png');
  await expect(files).toContainText('Ready');
- await sam.getByRole('button', { name: 'Send reply' }).click();
+ await sam.getByRole('button', { name: 'Send', exact: true }).click();
 
  const sent = sam.getByRole('list', { name: 'Messages', exact: true }).getByRole('listitem').filter({ hasText: 'Sam Agent' }).last();
  const link = sent.getByRole('link', { name: /error\.png/ });
@@ -85,11 +85,11 @@ test('a file that fails the policy or the scan blocks Send until it is removed',
  await sam.locator('input[type=file]').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from(eicar) });
  await expect(sam.getByRole('alert').filter({ hasText: 'malware scan' })).toBeVisible();
  await sam.getByLabel('Reply, visible to the customer').fill('Here is the log');
- await expect(sam.getByRole('button', { name: 'Send reply' })).toBeDisabled();
+ await expect(sam.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
  await expect(sam.getByText('remove or retry the files that did not upload')).toBeVisible();
  expect((await new AxeBuilder({ page: sam }).withTags(tags).analyze()).violations).toEqual([]);
  await sam.getByRole('button', { name: 'Remove notes.txt' }).click();
- await expect(sam.getByRole('button', { name: 'Send reply' })).toBeEnabled();
+ await expect(sam.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
  await sam.context().close();
 });
 
@@ -127,8 +127,8 @@ test('agents see who else is viewing or writing, and when the customer is typing
  await expect(presence(ada)).toContainText('Sam Agent is writing a reply');
 
  // Switching to an internal note ends the typing signal, and typing a note never starts one.
- await sam.getByText('Internal note', { exact: true }).click();
- await sam.getByLabel('Internal note, visible to the support team only').pressSequentially('Customer is on the old plan');
+ await sam.getByRole('button', { name: 'Work note' }).click();
+ await sam.getByLabel('Work note, visible to support only').pressSequentially('Customer is on the old plan');
  await expect(presence(ada)).toContainText('Sam Agent is viewing');
  expect((await tenantGet(`/dev/activity?conversationId=${conversationId}`)).agents).toEqual([
   { name: 'Ada Admin', activity: 'viewing' }, { name: 'Sam Agent', activity: 'viewing' },
@@ -153,6 +153,7 @@ test('availability is explicit: monitoring the inbox does not make an agent avai
  expect(reset.status()).toBe(200);
  await sam.goto('/inbox');
  await expect(sam.getByRole('group', { name: 'Monitored applications' })).toContainText('Payroll · Live');
+ await sam.getByRole('button', { name: /account and availability/ }).click();
  const toggle = sam.getByRole('button', { name: /Available for chats/ });
  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
  expect((await tenantGet('/dev/availability'))['Sam Agent']).toBe('away');
@@ -178,7 +179,10 @@ test('observers get no composer signals and no availability control', async ({ b
  const olive = await signedIn(browser, 'Olive Observer');
  const { conversationId } = await newConversation('Observer view');
  await openConversation(olive, conversationId);
+ await olive.getByRole('button', { name: /account and availability/ }).click();
+ await expect(olive.getByRole('button', { name: 'Sign out' })).toBeVisible();
  await expect(olive.getByRole('button', { name: /Available for chats/ })).toHaveCount(0);
+ await olive.keyboard.press('Escape');
  expect((await olive.request.post(`/api/apps/payroll/conversations/${conversationId}/activity`, { data: { activity: 'viewing' }, headers: { Origin: ORIGIN } })).status()).toBe(403);
  expect((await olive.request.post('/api/availability', { data: { status: 'available' }, headers: { Origin: ORIGIN } })).status()).toBe(403);
  expect((await tenantGet(`/dev/activity?conversationId=${conversationId}`)).agents).toEqual([]);

@@ -47,7 +47,7 @@ test('an admin registers and onboards an application through the wizard, and it 
  await ada.getByLabel('Map fleet-agent').check();
  await ada.getByLabel('Teams for fleet-agent').fill('support');
  await ada.getByLabel('Find a person').fill('Ada');
- await ada.getByRole('button', { name: 'Search' }).click();
+ await ada.getByRole('button', { name: 'Search', exact: true }).click();
  await ada.getByRole('button', { name: 'Add Ada Admin as a pilot' }).click();
  await ada.getByRole('button', { name: 'Save and continue' }).click();
 
@@ -257,7 +257,7 @@ test('people and roles: a granted bundle is audited and changes what the person 
  await ada.goto('/people');
  await expect(ada.getByRole('heading', { level: 3, name: 'fleet-observer' })).toBeVisible();
  await ada.getByLabel('Name or email').fill('Nina');
- await ada.getByRole('button', { name: 'Search' }).click();
+ await ada.getByRole('button', { name: 'Search', exact: true }).click();
  await ada.getByRole('button', { name: 'Manage Nina No Groups' }).click();
  await ada.getByRole('button', { name: 'Grant' }).click();
  await expect(ada.getByLabel('Reason (recorded in the audit)')).toBeFocused();

@@ -5,12 +5,19 @@ import { signInAs } from './helpers';
 /* Requires the mock IdP, API, console and a migrated database (npm run dev). */
 
 const session = async (page: Page) => (await page.request.get('/api/session')).json();
+/** Who you are and your roles are in the avatar menu (prototype v2). */
+async function expectRoles(page: Page, text: string) {
+ await page.getByRole('button', { name: /account and availability/ }).click();
+ await expect(page.getByText(text)).toBeVisible();
+ await page.keyboard.press('Escape');
+}
 
 test('agent signs in through the IdP and gets agent capabilities only', async ({ page }) => {
  await page.goto('/');
  await page.getByRole('banner').getByRole('link', { name: 'Sign in' }).click();
  await page.getByLabel('Sam Agent').check();
  await page.getByRole('button', { name: 'Continue' }).click();
+ await page.getByRole('button', { name: 'Sam Agent, account and availability' }).click();
  await expect(page.getByText('Signed in as Sam Agent (sam@example.test). Roles: Fleet agent')).toBeVisible();
  const s = await session(page);
  expect(s.capabilities).toContain('chat.reply');
@@ -21,6 +28,7 @@ test('agent signs in through the IdP and gets agent capabilities only', async ({
 
 test('admin can read the audit log, which records the sign-in', async ({ page }) => {
  await signInAs(page, 'Ada Admin');
+ await page.getByRole('button', { name: 'Ada Admin, account and availability' }).click();
  await expect(page.getByText('Roles: Fleet admin')).toBeVisible();
  const r = await page.request.get('/api/audit?category=session');
  expect(r.status()).toBe(200);
@@ -37,7 +45,7 @@ test('a replayed or forged callback does not sign in', async ({ page, browser })
  const callback = page.waitForRequest(r => r.url().includes('/api/auth/callback'));
  await signInAs(page, 'Sam Agent');
  const callbackUrl = (await callback).url();
- await expect(page.getByText('Roles: Fleet agent')).toBeVisible();
+ await expectRoles(page, 'Roles: Fleet agent');
 
  // Same browser replays the callback: the attempt was consumed.
  await page.goto(callbackUrl);
@@ -57,10 +65,11 @@ test('a replayed or forged callback does not sign in', async ({ page, browser })
 
 test('sign-out revokes the server session, and a copied cookie stops working', async ({ page, context }) => {
  await signInAs(page, 'Olive Observer');
- await expect(page.getByText('Roles: Fleet observer')).toBeVisible();
+ await expectRoles(page, 'Roles: Fleet observer');
  const cookie = (await context.cookies()).find(c => c.name === 'resolve_session')!;
  expect(cookie.httpOnly).toBe(true);
  expect(cookie.sameSite).toBe('Lax');
+ await page.getByRole('button', { name: /account and availability/ }).click();
  await page.getByRole('button', { name: 'Sign out' }).click();
  await expect(page.getByRole('status').filter({ hasText: 'You have signed out.' })).toBeVisible();
  await context.addCookies([cookie]);
@@ -69,17 +78,17 @@ test('sign-out revokes the server session, and a copied cookie stops working', a
 
 test('signing in again replaces the previous session', async ({ page, context }) => {
  await signInAs(page, 'Sam Agent');
- await expect(page.getByText('Roles: Fleet agent')).toBeVisible();
+ await expectRoles(page, 'Roles: Fleet agent');
  const first = (await context.cookies()).find(c => c.name === 'resolve_session')!;
  await signInAs(page, 'Sam Agent');
- await expect(page.getByText('Roles: Fleet agent')).toBeVisible();
+ await expectRoles(page, 'Roles: Fleet agent');
  await context.addCookies([first]);
  expect(await session(page)).toEqual({ authenticated: false });
 });
 
 test('sign-out rejects cross-origin and origin-less requests', async ({ page }) => {
  await signInAs(page, 'Olive Observer');
- await expect(page.getByText('Roles: Fleet observer')).toBeVisible();
+ await expectRoles(page, 'Roles: Fleet observer');
  expect((await page.request.post('/api/auth/logout', { headers: { Origin: 'https://evil.example' }, maxRedirects: 0 })).status()).toBe(403);
  expect((await session(page)).authenticated).toBe(true);
 });
@@ -94,7 +103,7 @@ test('return paths are preserved, and off-site return paths are ignored', async 
 
 test('a user without mapped groups signs in with no capabilities', async ({ page }) => {
  await signInAs(page, 'Nina No Groups');
- await expect(page.getByText('Roles: none. Ask an administrator for access.')).toBeVisible();
+ await expectRoles(page, 'Roles: none. Ask an administrator for access.');
  expect((await session(page)).capabilities).toEqual([]);
 });
 
@@ -104,7 +113,7 @@ test('a different subject with the same email is a different Resolve user', asyn
   const ctx = await browser.newContext({ baseURL: 'http://127.0.0.1:4200' });
   const page = await ctx.newPage();
   await signInAs(page, name);
-  await expect(page.getByText(`Signed in as ${name}`)).toBeVisible();
+  await expect(page.getByRole('button', { name: `${name}, account and availability` })).toBeVisible();
   ids.push((await session(page)).user.id);
   await ctx.close();
  }

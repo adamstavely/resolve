@@ -50,6 +50,7 @@ export const GAPS = {
  'QB-PROTO-1': 'Tenants do not advertise supported protocol/tool versions',
  'QB-FILE-1': 'No authorized attachment download contract for Resolve',
  'QB-FILE-2': 'upload_file is not bound to an uploader and target, has no type policy, scan result, expiry or upload key',
+ 'QB-ANN-3': 'Tier 1+ support staff cannot manage Everyone announcements without announcement.manage (owner decision 2026-10-12: Tier 1 is enough for their application)',
  'QB-TIER-1': "Tiered support (fork plan v2/30) is not built; no tool reports the caller's effective tier (T1-T3) in an application",
  'QB-OBS-2': "Applications do not carry Resolve's operation key into downstream telemetry (labels.resolve_operation_id), so receipts cannot observe delivery",
  'QB-OBS-1': "No tool returns a customer's verified external id (the host app's signed-identify sub) for a conversation or ticket",
@@ -103,11 +104,11 @@ export const TENANT_TOOLS = {
  get_support_dashboard: { status: 'missing', scope: 'read:chat', permissions: ['analytics.view', 'conversation.view', 'ticket.view'], objectPolicy: 'Counts use the same predicates as drill-down lists', idempotency: 'read', gaps: ['QB-DASH-1'] },
  list_support_activity: { status: 'missing', scope: 'read:chat', permissions: ['conversation.view', 'ticket.view'], objectPolicy: 'Entries and content filtered per caller', idempotency: 'read', gaps: ['QB-DASH-2'] },
  list_announcements: { status: 'missing', scope: 'read:announcement', permissions: ['announcement.view'], objectPolicy: 'Workspace announcements', idempotency: 'read', gaps: ['QB-ANN-1'] },
- upsert_announcement: { status: 'missing', scope: 'write:announcement', permissions: ['announcement.manage'], objectPolicy: "Fleet broadcasts use tier 'authenticated' (Everyone)", idempotency: 'keyed', gaps: ['QB-ANN-1', 'QB-ANN-2'] },
+ upsert_announcement: { status: 'missing', scope: 'write:announcement', permissions: ['announcement.manage'], objectPolicy: "Fleet broadcasts use tier 'authenticated' (Everyone)", idempotency: 'keyed', gaps: ['QB-ANN-1', 'QB-ANN-2', 'QB-ANN-3'] },
  get_announcement_by_key: { status: 'missing', scope: 'read:announcement', permissions: ['announcement.manage'], objectPolicy: 'Announcements this caller published', idempotency: 'read', gaps: ['QB-ANN-2'] },
  get_my_tier: { status: 'missing', scope: 'read:chat', permissions: [], objectPolicy: 'The caller only: highest tier across their tier-team memberships (getEffectiveTier); null when untiered', idempotency: 'read', gaps: ['QB-TIER-1'] },
  get_customer_identity: { status: 'missing', scope: 'read:chat', permissions: ['conversation.view', 'ticket.view'], objectPolicy: 'Same policy as conversation/ticket detail; only the verified signed-identify external id, never one derived from email or an unverified identify', idempotency: 'read', gaps: ['QB-OBS-1'] },
- archive_announcement: { status: 'missing', scope: 'write:announcement', permissions: ['announcement.manage'], objectPolicy: 'Version-checked against local edits', idempotency: 'idempotent', gaps: ['QB-ANN-1'] },
+ archive_announcement: { status: 'missing', scope: 'write:announcement', permissions: ['announcement.manage'], objectPolicy: 'Version-checked against local edits', idempotency: 'idempotent', gaps: ['QB-ANN-1', 'QB-ANN-3'] },
 } as const satisfies Record<string, ToolDescriptor>;
 export type TenantToolName = keyof typeof TENANT_TOOLS;
 

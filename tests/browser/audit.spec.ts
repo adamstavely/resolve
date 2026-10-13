@@ -9,7 +9,7 @@ async function signedIn(browser: Browser, name: string) {
  const ctx = await browser.newContext({ baseURL: ORIGIN });
  const page = await ctx.newPage();
  await signInAs(page, name);
- await expect(page.getByText(`Signed in as ${name}`)).toBeVisible();
+ await expect(page.getByRole('button', { name: `${name}, account and availability` })).toBeVisible();
  return page;
 }
 type Ev = { operation: string; actor: string; outcome: string; summary: Record<string, unknown>; content: string | null };
@@ -26,7 +26,7 @@ test('reads, refusals and messages sent are all audited, with the message text',
  expect((await sam.request.get('/api/admin/users')).status()).toBe(403);
  const text = `Audit me ${Math.random().toString(36).slice(2, 7)}`;
  await sam.getByLabel('Reply, visible to the customer').fill(text);
- await sam.getByRole('button', { name: 'Send reply' }).click();
+ await sam.getByRole('button', { name: 'Send', exact: true }).click();
  await expect(sam.getByRole('list', { name: 'Messages', exact: true })).toContainText(text);
 
  const ada = await signedIn(browser, 'Ada Admin');

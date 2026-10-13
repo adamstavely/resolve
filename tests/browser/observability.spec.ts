@@ -20,7 +20,7 @@ async function signedIn(browser: Browser, name: string) {
  const ctx = await browser.newContext({ baseURL: ORIGIN });
  const page = await ctx.newPage();
  await signInAs(page, name);
- await expect(page.getByText(`Signed in as ${name}`)).toBeVisible();
+ await expect(page.getByRole('button', { name: `${name}, account and availability` })).toBeVisible();
  return page;
 }
 const post = (p: Page, path: string, data: unknown) => p.request.post(path, { headers: json, data: JSON.stringify(data) });
@@ -128,7 +128,7 @@ test('application cards show live health like the prototype: status, current iss
  const issues = sam.getByRole('region', { name: 'Known issues' });
  await expect(issues).toContainText('Payslip downloads failing in EU-West');
  await expect(issues).toContainText('Failed transaction rate is 7.8%');
- await expect(issues).toContainText('About 18 affected customers');
+ await expect(issues).toContainText('18 affected');
  await expect(issues).not.toContainText('dev-secret');
  const axe = await new AxeBuilder({ page: sam }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
  expect(axe.violations).toEqual([]);
@@ -142,8 +142,9 @@ test('application cards show live health like the prototype: status, current iss
  await expect(checked.getByRole('row', { name: /Download payslip · eu-west/ })).toContainText('Degraded');
  await expect(checked.getByRole('row', { name: /^Alerts/ })).toContainText('1 active');
  await expect(checked).toContainText('Recent synthetic runs');
- await expect(sam.getByRole('region', { name: 'Known issues' })).toContainText('Payslip downloads failing in EU-West');
- await expect(sam.getByRole('region', { name: 'Known issues' })).not.toContainText('HR');
+ // Prototype v2: the application's workspace shows its current issue as a banner.
+ await expect(sam.getByRole('region', { name: 'Active incident' })).toContainText('Payslip downloads failing in EU-West');
+ await expect(sam.getByRole('region', { name: 'Active incident' })).not.toContainText('HR');
  const axe2 = await new AxeBuilder({ page: sam }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
  expect(axe2.violations).toEqual([]);
  await sam.context().close();
@@ -159,9 +160,9 @@ test('an agent links a ticket to a known issue after choosing it; observers cann
  const ticket = tickets.tickets[0];
  expect((await post(sam, `/api/apps/payroll/tickets/${ticket.id}/messages`, { kind: 'note', content: 'Customer reports payslip download errors.', operationId: crypto.randomUUID() })).ok()).toBe(true);
  await sam.goto('/');
- const issue = sam.getByRole('region', { name: 'Known issues' }).getByRole('listitem').filter({ hasText: 'Failed transaction rate' });
- await issue.getByRole('button', { name: /Link tickets/ }).click();
- const review = sam.getByRole('group', { name: /Link tickets to/ });
+ const issue = sam.getByRole('region', { name: 'Known issues' }).locator('.kn-issue').filter({ hasText: 'Failed transaction rate' });
+ await issue.getByRole('button', { name: /Bulk-link tickets/ }).click();
+ const review = sam.getByRole('dialog', { name: /Link tickets to/ });
  const box = review.getByRole('checkbox', { name: new RegExp(ticket.reference) });
  await expect(box).not.toBeChecked();
  await expect(review).toContainText('nothing is pre-selected');
@@ -182,7 +183,7 @@ test('an agent links a ticket to a known issue after choosing it; observers cann
  const olive = await signedIn(browser, 'Olive Observer');
  await expect(olive.getByRole('region', { name: 'Your applications · live health' }).getByRole('article', { name: 'Payroll' })).toContainText('Degraded');
  await expect(olive.getByRole('region', { name: 'Known issues' })).toContainText('Payslip downloads failing');
- await expect(olive.getByRole('button', { name: /Link tickets/ })).toHaveCount(0);
+ await expect(olive.getByRole('button', { name: /Bulk-link tickets/ })).toHaveCount(0);
  expect((await post(olive, `/api/apps/payroll/observability/issues/${issueId}/links`, { requestId: crypto.randomUUID(), ticketIds: [ticket.id] })).status()).toBe(403);
  await olive.context().close();
 });
@@ -203,8 +204,8 @@ test('the kill switch empties health at once, live; chat keeps working while Ela
  }
  await fetch(`${ES}/dev/fault`, { method: 'POST', body: JSON.stringify({ kind: 'unavailable' }) });
  try {
-  await sam.goto('/inbox');
-  await expect(sam.getByRole('heading', { name: 'Inbox', level: 1 })).toBeVisible();
+  await sam.goto('/tickets');
+  await expect(sam.getByRole('heading', { name: 'My tickets', level: 1 })).toBeVisible();
   expect((await sam.request.get('/api/apps/payroll/conversations')).ok()).toBe(true);
   expect((await sam.request.get('/api/apps/payroll/tickets')).ok()).toBe(true);
  } finally {

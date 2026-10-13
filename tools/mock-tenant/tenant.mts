@@ -179,7 +179,8 @@ export async function startTenant(t: TenantConfig, ctx: FleetContext, image: str
    }
    const p = u && people.find(x => x.sub === u.idpSub && u.idpIss === ctx.idp);
    if (!p) return { principalId: u?.principalId ?? 'principal_' + tenantUserId.slice(5), role: 'portal', teams: [], analytics: false, denied: false, managed: false, announcer: false };
-   return { principalId: u!.principalId, role: p.role, teams: p.teams, analytics: analytics(p.role), denied: false, managed: false, announcer: p.role === 'admin' || !!p.announcements, tier: p.role === 'observer' ? null : p.tier };
+   // QB-ANN-3 (target): Tier 1+ support staff may manage Everyone announcements in their application (owner decision 2026-10-12).
+   return { principalId: u!.principalId, role: p.role, teams: p.teams, analytics: analytics(p.role), denied: false, managed: false, announcer: p.role === 'admin' || !!p.announcements || (p.role !== 'observer' && !!p.tier), tier: p.role === 'observer' ? null : p.tier };
   },
   probe(tenantUserId, tool, args) {
    if (!tenantUserId) return { ok: false, code: 'UNAUTHENTICATED' };

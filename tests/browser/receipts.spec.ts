@@ -8,6 +8,7 @@ import { ES, FLEET, payrollMapped, post, signedIn, tags, ticketFor } from './ela
  * open case, so closing their ticket warns; customer 7 is not identified.
  */
 const RUN = Date.now().toString(36);
+const resolveTool = (page: import('@playwright/test').Page) => page.getByRole('complementary', { name: /tools$/ }).getByRole('button', { name: 'Resolve ticket' }).click();
 test.describe.configure({ mode: 'serial' });
 test.beforeAll(async ({ browser }) => { const ada = await payrollMapped(browser, `Receipts ${RUN}`); await ada.context().close(); });
 
@@ -15,8 +16,9 @@ test("resolving an affected customer's ticket warns before acting, and linking t
  const sam = await signedIn(browser, 'Sam Agent', ['payroll']);
  const t = await ticketFor(sam, 1);
  await sam.goto(`/tickets/payroll/${t.id}`);
- await sam.getByLabel('Change status').selectOption('closed');
- const dialog = sam.getByRole('alertdialog', { name: 'Resolve this ticket?' });
+ // Prototype v2: Resolve is a tool on the case rail; its drawer runs the pre-flight first.
+ await resolveTool(sam);
+ const dialog = sam.getByRole('dialog', { name: 'Resolve ticket' });
  await expect(dialog).toContainText('Pre-flight check');
  await expect(dialog).toContainText('The application is degraded');
  await expect(dialog).toContainText('Matches known issue case-payroll-1182');
@@ -26,10 +28,11 @@ test("resolving an affected customer's ticket warns before acting, and linking t
  await expect(dialog).toContainText('Pre-flight result is saved with the action log');
  const link = dialog.getByRole('button', { name: 'Link to case-payroll-1182 and notify me' });
  await expect(link).toBeFocused();
- expect((await new AxeBuilder({ page: sam }).withTags(tags).include('dialog').analyze()).violations).toEqual([]);
+ expect((await new AxeBuilder({ page: sam }).withTags(tags).include('[role=dialog]').analyze()).violations).toEqual([]);
  await link.click();
- await expect(sam.getByText(/Linked to case-payroll-1182\. You'll be told when it clears; the ticket stays open\./)).toBeVisible();
- await expect(sam.getByLabel('Change status')).toHaveValue('open');
+ await expect(sam.getByText(/Linked to case-payroll-1182\. You'll be told when it clears; the ticket stays open\./).first()).toBeVisible();
+ await expect(dialog).toBeHidden();
+ await expect(sam.locator('.conv-meta')).toContainText('Open');
  const subs = (await (await sam.request.get('/api/observability/subscriptions')).json()).subscriptions;
  expect(subs.some((s: { objectId: string }) => s.objectId === t.id)).toBe(true);
  await sam.context().close();
@@ -47,14 +50,14 @@ test('a warning can be overridden only with a reason, which is audited and shown
  expect(body.preflight.outcome).toBe('warn');
 
  await sam.goto(`/tickets/payroll/${t.id}`);
- await sam.getByLabel('Change status').selectOption('closed');
- const dialog = sam.getByRole('alertdialog', { name: 'Resolve this ticket?' });
+ await resolveTool(sam);
+ const dialog = sam.getByRole('dialog', { name: 'Resolve ticket' });
  await dialog.getByRole('button', { name: 'Run anyway' }).click();
  await expect(dialog.getByRole('button', { name: 'Run anyway' })).toBeDisabled();
- await dialog.getByLabel('Why go ahead anyway? (recorded in the audit)').fill('Customer confirmed by phone it is fixed for them');
+ await dialog.getByLabel('Why go ahead anyway?').fill('Customer confirmed by phone it is fixed for them');
  await dialog.getByRole('button', { name: 'Run anyway' }).click();
- await expect(sam.getByText('Status updated.')).toBeVisible();
- await sam.getByRole('link', { name: 'View receipt' }).click();
+ await expect(sam.locator('.toast').filter({ hasText: 'Status updated' })).toBeVisible();
+ await dialog.getByRole('link', { name: 'Open the receipt' }).click();
  const receipt = sam.getByRole('region', { name: /Resolved a ticket/ });
  await expect(receipt).toContainText('Accepted and confirmed by the application.');
  await expect(receipt).toContainText('No downstream signal is defined for this action.');
@@ -74,12 +77,12 @@ test("an unidentified customer's ticket gets 'not known' checks and may be resol
  const sam = await signedIn(browser, 'Sam Agent', ['payroll']);
  const t = await ticketFor(sam, 7);
  await sam.goto(`/tickets/payroll/${t.id}`);
- await sam.getByLabel('Change status').selectOption('closed');
- const dialog = sam.getByRole('alertdialog', { name: 'Resolve this ticket?' });
+ await resolveTool(sam);
+ const dialog = sam.getByRole('dialog', { name: 'Resolve ticket' });
  await expect(dialog).toContainText('The application did not identify this customer');
- await expect(dialog.getByRole('button', { name: 'Keep open' })).toBeFocused();
- await dialog.getByRole('button', { name: 'Resolve ticket' }).click();
- await expect(sam.getByText('Status updated.')).toBeVisible();
+ await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+ await dialog.getByRole('button', { name: 'Resolve ticket', exact: true }).click();
+ await expect(sam.locator('.toast').filter({ hasText: 'Status updated' })).toBeVisible();
  await sam.context().close();
 });
 
@@ -88,7 +91,7 @@ test('a reply gets a verified receipt once the notification service is seen hand
  const t = await ticketFor(sam, 2);
  await sam.goto(`/tickets/payroll/${t.id}`);
  await sam.getByLabel('Reply, visible to the customer').fill(`We are on it ${RUN}`);
- await sam.getByRole('button', { name: 'Send reply' }).click();
+ await sam.getByRole('button', { name: 'Send', exact: true }).click();
  await sam.getByRole('link', { name: 'View the receipt for your reply' }).click();
  const receipt = sam.getByRole('region', { name: /Reply/ });
  await expect(receipt).toContainText("Recorded in Resolve's audit");
@@ -102,7 +105,7 @@ test('a reply gets a verified receipt once the notification service is seen hand
  try {
   await sam.goto(`/tickets/payroll/${t.id}`);
   await sam.getByLabel('Reply, visible to the customer').fill(`Second update ${RUN}`);
-  await sam.getByRole('button', { name: 'Send reply' }).click();
+  await sam.getByRole('button', { name: 'Send', exact: true }).click();
   await sam.getByRole('link', { name: 'View the receipt for your reply' }).click();
   await expect(sam.getByRole('heading', { level: 1 })).toHaveText('Reply did not go through', { timeout: 30_000 });
   await expect(sam.getByRole('main')).toContainText('The relay reported a failure (HTTP 550)');

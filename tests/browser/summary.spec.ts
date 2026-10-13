@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { payrollMapped, post, signedIn, tags, ticketFor } from './elastic-helpers';
+import { payrollMapped, post, signedIn, tags, ticketFor, captureSnapshot } from './elastic-helpers';
 
 /*
  * Requires npm run dev (including the mock summary model on 3500). Plan 14, E4: ML log patterns for investigators
@@ -16,6 +16,7 @@ test('investigators see unusual log patterns from Elastic ML; agents see that th
  const ivy = await signedIn(browser, 'Ivy Investigator', ['payroll']);
  const t = await ticketFor(ivy, 1);
  await ivy.goto(`/tickets/payroll/${t.id}`);
+ await ivy.getByRole('region', { name: 'System context' }).getByRole('tab', { name: /Systems/ }).click();
  const patterns = ivy.getByRole('region', { name: /Log patterns · payroll-api/ });
  await expect(patterns).toContainText('New since');
  await expect(patterns).toContainText('1284 events · anomaly score 91');
@@ -26,6 +27,7 @@ test('investigators see unusual log patterns from Elastic ML; agents see that th
  await ivy.context().close();
  const sam = await signedIn(browser, 'Sam Agent', ['payroll']);
  await sam.goto(`/tickets/payroll/${t.id}`);
+ await sam.getByRole('region', { name: 'System context' }).getByRole('tab', { name: /Systems/ }).click();
  await expect(sam.getByRole('region', { name: /Log patterns/ })).toHaveCount(0);
  await expect(sam.getByRole('region', { name: 'System context' })).toContainText('Trace IDs, log patterns, log lines and Kibana links appear for investigators.');
  await sam.context().close();
@@ -35,8 +37,7 @@ test('a draft summary cites the snapshot, labels what is unsupported, drops inve
  const ivy = await signedIn(browser, 'Ivy Investigator', ['payroll']);
  const t = await ticketFor(ivy, 1);
  await ivy.goto(`/tickets/payroll/${t.id}`);
- await ivy.getByRole('button', { name: 'Capture evidence snapshot' }).click();
- await ivy.getByRole('link', { name: 'View the snapshot' }).click();
+ await captureSnapshot(ivy);
  const ev = ivy.getByRole('region', { name: 'Evidence snapshot' });
  await expect(ev).toContainText('Log patterns and restricted detail');
  await expect(ev).toContainText('payslip render retry key=<*>');
@@ -79,8 +80,7 @@ test('when the model is down, the summary says so; the evidence is unaffected', 
  const sam = await signedIn(browser, 'Sam Agent', ['payroll']);
  const t = await ticketFor(sam, 2);
  await sam.goto(`/tickets/payroll/${t.id}`);
- await sam.getByRole('button', { name: 'Capture evidence snapshot' }).click();
- await sam.getByRole('link', { name: 'View the snapshot' }).click();
+ await captureSnapshot(sam);
  await fetch(`${MODEL}/dev/fault`, { method: 'POST', body: JSON.stringify({ down: true }) });
  try {
   const summary = sam.getByRole('region', { name: 'Draft summary' });

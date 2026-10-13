@@ -9,6 +9,7 @@ import type { announcementToolResults, broadcastDraftSchema, broadcastTargetingS
 import { transaction, type Queryable } from './db';
 import { writeAudit } from './audit';
 import { capabilityList } from './auth/policy';
+import { tiersFor } from './clearance';
 import { registry } from './registry';
 import { rpc } from './tenants/mcp';
 import { actionSupported, tenantHealth } from './tenants/protocol';
@@ -47,6 +48,31 @@ const requireAuthor = (b: BroadcastRow, actor: Actor) => { if (b.author_user_id 
 const audit = (db: Queryable, actorUserId: string | null, operation: string, summary: Record<string, string | number | boolean | null>, outcome: 'succeeded' | 'failed' | 'pending' | 'uncertain' | 'denied' = 'succeeded', content?: string) =>
  writeAudit(db, { actorUserId, operation: `broadcast.${operation}`, outcome, summary, content });
 const contentText = (c: BroadcastContent) => [c.title, c.body, c.link ? `${c.link.label} <${c.link.url}>` : null].filter(Boolean).join('\n');
+
+// ── Tier-scoped authors ──
+
+/** Authors with `broadcast.app` but not `broadcast.publish`: banners only to applications where they hold Tier 1+. */
+export const tierScoped = (actor: Actor) => !actor.capabilities.includes('broadcast.publish');
+
+/**
+ * Re-checked at draft, review and publish (a tier can change in the application between them). "All applications"
+ * is never open to a tier-scoped author, and every selected application must report Tier 1 or higher for them.
+ */
+export async function assertTargetingAllowed(actor: Actor, targeting: Targeting) {
+ if (!tierScoped(actor)) return;
+ if (targeting.mode !== 'selected') return fail(403, 'TIER_SCOPE', 'You can send banners only to applications where you hold Tier 1 or higher. Choose those applications.', { field: 'targeting' });
+ const tiers = await tiersFor(actor.userId, targeting.apps);
+ const outside = targeting.apps.filter(k => !tiers[k]);
+ if (outside.length) {
+  const names = new Map((await registry()).apps.map(a => [a.appKey, a.displayName]));
+  fail(403, 'TIER_SCOPE', `You do not hold Tier 1 or higher in ${outside.map(k => names.get(k) ?? k).join(', ')}, so you cannot send it a banner.`, { field: 'targeting' });
+ }
+}
+/** A tier-scoped author sees and changes only their own broadcasts. */
+export async function assertCanView(db: Queryable, actor: Actor, id: string) {
+ if (!tierScoped(actor)) return;
+ requireAuthor(await load(db, id), actor);
+}
 
 // ── Drafts ──
 
@@ -106,6 +132,7 @@ export async function review(db: Queryable, actor: Actor, id: string): Promise<B
  const b = await load(db, id);
  requireAuthor(b, actor);
  if (b.status !== 'draft') fail(409, 'NOT_DRAFT', 'This broadcast was already published.');
+ await assertTargetingAllowed(actor, b.draft.targeting);
  const r = await recipients(db, b.draft.targeting, actor.userId);
  await audit(db, actor.userId, 'review', { broadcastId: id, recipients: r.recipients.length, blocked: r.recipients.filter(x => x.state === 'blocked').length });
  return { broadcastId: id, revision: 1, reviewHash: reviewHashOf(b.draft, r), registryRevision: r.registryRevision, recipients: r.recipients,
@@ -121,6 +148,7 @@ export async function publish(db: Pick<Pool, 'connect'> & Queryable, actor: Acto
  const b = await load(db, id);
  requireAuthor(b, actor);
  if (b.status !== 'draft') fail(409, 'NOT_DRAFT', 'This broadcast was already published.');
+ await assertTargetingAllowed(actor, b.draft.targeting);
  const r = await recipients(db, b.draft.targeting, actor.userId);
  if (reviewHashOf(b.draft, r) !== body.reviewHash) fail(409, 'STALE_REVIEW', 'Something changed since you reviewed (content, recipients or their readiness). Review again.');
  const scheduled = isScheduled(b.draft.content);
@@ -157,9 +185,9 @@ export async function materialize(db: Pick<Pool, 'connect'> & Queryable, id: str
  let list: { appKey: string; state: 'ready' | 'blocked'; reason: BlockReason | null; announcementId?: string | null; version?: number | null }[] = rev.reviewed_recipients;
  if (scheduledLate) {
   const author = (await db.query(`SELECT u.enabled, ARRAY(SELECT DISTINCT bundle FROM role_members m WHERE m.user_id = u.id) AS bundles FROM users u WHERE u.id = $1`, [b.author_user_id])).rows[0];
-  const authorised = author?.enabled && capabilityList(author.bundles).includes('broadcast.publish');
   const fresh = await recipients(db, rev.targeting, b.author_user_id);
-  list = fresh.recipients.map(x => authorised ? x : { ...x, state: 'blocked' as const, reason: 'author_not_authorized' as const });
+  const allowed = await authorAllowed(author, b.author_user_id, fresh.recipients.map(x => x.appKey));
+  list = fresh.recipients.map(x => allowed.has(x.appKey) ? x : { ...x, state: 'blocked' as const, reason: 'author_not_authorized' as const });
  }
  if (revision > 1) {
   // An edit updates each app's existing announcement (version-checked against local edits).
@@ -178,6 +206,19 @@ export async function materialize(db: Pick<Pool, 'connect'> & Queryable, id: str
   await tx.query(`UPDATE broadcasts SET status = 'publishing', updated_at = now() WHERE id = $1 AND status IN ('scheduled', 'publishing', 'published', 'partial', 'needs_attention', 'failed')`, [id]);
  });
  await refreshStatus(db, id);
+}
+
+/**
+ * Which of these applications the author may still banner when it is sent: all of them with `broadcast.publish`;
+ * with only `broadcast.app`, those where the application still reports Tier 1 or higher for them.
+ */
+async function authorAllowed(author: { enabled: boolean; bundles: string[] } | undefined, userId: string, appKeys: string[]): Promise<Set<string>> {
+ if (!author?.enabled) return new Set();
+ const caps = capabilityList(author.bundles as Parameters<typeof capabilityList>[0]);
+ if (caps.includes('broadcast.publish')) return new Set(appKeys);
+ if (!caps.includes('broadcast.app')) return new Set();
+ const tiers = await tiersFor(userId, appKeys);
+ return new Set(appKeys.filter(k => tiers[k]));
 }
 
 /** Send every pending delivery of a broadcast's current revision (bounded fan-out; one app's failure affects no other). */
@@ -200,7 +241,7 @@ async function deliver(db: Pick<Pool, 'connect'> & Queryable, b: BroadcastRow, a
  if (!claimed) return;
  const rev = (await db.query('SELECT content FROM broadcast_revisions WHERE broadcast_id = $1 AND revision = $2', [b.id, b.current_revision])).rows[0];
  const author = (await db.query(`SELECT u.enabled, ARRAY(SELECT DISTINCT bundle FROM role_members m WHERE m.user_id = u.id) AS bundles FROM users u WHERE u.id = $1`, [b.author_user_id])).rows[0];
- if (!author?.enabled || !capabilityList(author.bundles).includes('broadcast.publish')) return settle(db, claimed, b.author_user_id, { state: 'blocked', reason: 'author_not_authorized' });
+ if (!(await authorAllowed(author, b.author_user_id, [appKey])).has(appKey)) return settle(db, claimed, b.author_user_id, { state: 'blocked', reason: 'author_not_authorized' });
  const app = (await registry()).apps.find(a => a.appKey === appKey);
  const reason = await readiness(db, app, b.author_user_id);
  if (reason) return settle(db, claimed, b.author_user_id, { state: 'blocked', reason });
@@ -383,10 +424,11 @@ export async function view(db: Queryable, id: string, viewerUserId: string | nul
  };
 }
 
-export async function list(db: Queryable) {
+/** Every broadcast, or only the author's own (tier-scoped authors). */
+export async function list(db: Queryable, onlyAuthor: string | null = null) {
  const rows = (await db.query(`SELECT b.id, b.status, b.updated_at, b.draft, u.display_name,
    (SELECT count(*)::int FROM broadcast_deliveries d WHERE d.broadcast_id = b.id AND d.revision = b.current_revision) AS recipients,
    (SELECT count(*)::int FROM broadcast_deliveries d WHERE d.broadcast_id = b.id AND d.revision = b.current_revision AND d.state = 'succeeded') AS succeeded
-  FROM broadcasts b JOIN users u ON u.id = b.author_user_id ORDER BY b.updated_at DESC LIMIT 100`)).rows;
+  FROM broadcasts b JOIN users u ON u.id = b.author_user_id WHERE ($1::uuid IS NULL OR b.author_user_id = $1) ORDER BY b.updated_at DESC LIMIT 100`, [onlyAuthor])).rows;
  return rows.map(r => ({ id: r.id, title: r.draft.content.title, kind: r.draft.content.kind, status: r.status, author: r.display_name, updatedAt: r.updated_at.toISOString(), recipients: r.recipients, succeeded: r.succeeded }));
 }

@@ -14,7 +14,7 @@ export async function signedIn(browser: Browser, name: string) {
  const ctx = await browser.newContext({ baseURL: ORIGIN });
  const page = await ctx.newPage();
  await signInAs(page, name);
- await expect(page.getByText(`Signed in as ${name}`)).toBeVisible();
+ await expect(page.getByRole('button', { name: `${name}, account and availability` })).toBeVisible();
  return page;
 }
 export async function me(page: Page) { return (await (await page.request.get('/api/session')).json()).user as { id: string; displayName: string }; }

@@ -24,17 +24,17 @@ const TYPING_IDLE_MS = 5000;
  imports: [IconComponent],
  template: `
 @if (pending().length) {
- <ul class="pending" aria-label="Messages awaiting confirmation">
+ <ul class="pending" aria-label="Messages awaiting confirmation" style="margin:0 0 10px;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px">
   @for (p of pending(); track p.operationId) {
-   <li class="pending-item" [attr.data-state]="p.state">
-    <div class="msg-head"><span class="msg-author">You</span>
-     <span class="tag" [attr.data-tone]="p.state === 'sending' ? 'neutral' : p.state === 'uncertain' ? 'sensitive' : 'destructive'">{{ label(p) }}</span>
-     <span class="muted small">{{ p.kind === 'note' ? 'Internal note' : 'Reply' }}</span></div>
-    @if (p.content) { <p class="msg-body">{{ p.content }}</p> }
-    @if (p.files.length) { <p class="small muted"><rs-icon name="paperclip" [size]="13" /> {{ fileNames(p.files) }}</p> }
+   <li class="msgbox" [attr.data-state]="p.state" style="padding:9px 12px">
+    <div class="tags" style="gap:8px"><b style="font-size:var(--fs-sm)">You</b>
+     <span [class]="p.state === 'sending' ? 'meta' : 'waiting'">{{ label(p) }}</span>
+     <span class="meta">{{ p.kind === 'note' ? 'Work note' : 'Reply' }}</span></div>
+    @if (p.content) { <div style="white-space:pre-wrap;margin-top:4px">{{ p.content }}</div> }
+    @if (p.files.length) { <div class="meta" style="margin-top:4px"><rs-icon name="paperclip" [size]="12" /> {{ fileNames(p.files) }}</div> }
     @if (p.state !== 'sending') {
-     <p class="small" role="alert">{{ p.message }}</p>
-     <div class="row">
+     <p class="small" role="alert" style="margin:6px 0">{{ p.message }}</p>
+     <div class="comp-row">
       @if (p.state === 'uncertain') { <button class="btn btn-sm" type="button" (click)="check.emit(p)">Check result</button> }
       <button class="btn btn-sm" type="button" (click)="retry.emit(p)">Retry<span class="sr-only"> sending this {{ p.kind === 'note' ? 'note' : 'reply' }}</span></button>
       <button class="btn btn-sm btn-ghost" type="button" (click)="discard.emit(p)">Discard</button>
@@ -44,38 +44,38 @@ const TYPING_IDLE_MS = 5000;
   }
  </ul>
 }
-<form class="composer" (submit)="submit($event)" [attr.aria-label]="'Write a ' + (kind() === 'note' ? 'note' : 'reply')">
- <fieldset class="segmented">
-  <legend class="sr-only">Message type</legend>
-  <label [class.on]="kind() === 'reply'"><input type="radio" name="kind" value="reply" [checked]="kind() === 'reply'" [disabled]="!canReply()" (change)="setKind('reply')">Reply to customer</label>
-  <label [class.on]="kind() === 'note'"><input type="radio" name="kind" value="note" [checked]="kind() === 'note'" [disabled]="!canNote()" (change)="setKind('note')">Internal note</label>
- </fieldset>
- <label class="sr-only" [attr.for]="fieldId()">{{ kind() === 'note' ? 'Internal note, visible to the support team only' : 'Reply, visible to the customer' }}</label>
- <textarea [id]="fieldId()" rows="3" maxlength="4000" [value]="draft()" (input)="onInput($any($event.target).value)"
-  [attr.aria-describedby]="fieldId() + '-hint'" [placeholder]="kind() === 'note' ? 'Only your support team sees notes' : 'The customer sees this reply'"></textarea>
+<form class="composer-form" (submit)="submit($event)" [attr.aria-label]="'Write a ' + (kind() === 'note' ? 'work note' : 'reply')" style="margin:0">
+ <div class="comp-row" style="margin-bottom:8px">
+  <div class="seg" role="group" aria-label="Message type">
+   <button type="button" [attr.data-on]="kind() === 'reply'" [attr.aria-pressed]="kind() === 'reply'" [disabled]="!canReply()" (click)="setKind('reply')">Reply to {{ firstName() }}</button>
+   <button type="button" [attr.data-on]="kind() === 'note'" [attr.aria-pressed]="kind() === 'note'" [disabled]="!canNote()" (click)="setKind('note')">Work note</button>
+  </div>
+  <span style="flex:1"></span>
+  @if (uploadPath()) {
+   <input #fileInput type="file" multiple hidden [attr.accept]="accept" (change)="picked($any($event.target))">
+   <button class="chipbtn" type="button" (click)="fileInput.click()" [disabled]="attachments().length >= max"><rs-icon name="paperclip" [size]="12" /> Attach files</button>
+  }
+ </div>
+ <label class="sr-only" [attr.for]="fieldId()">{{ kind() === 'note' ? 'Work note, visible to support only' : 'Reply, visible to the customer' }}</label>
+ <textarea [id]="fieldId()" maxlength="4000" [value]="draft()" (input)="onInput($any($event.target).value)" (keydown)="onKeydown($event)"
+  [attr.aria-describedby]="fieldId() + '-hint'" [placeholder]="kind() === 'note' ? 'Internal note, visible to support only…' : 'Write to ' + firstName() + '…'"></textarea>
  @if (attachments().length) {
-  <ul class="attach-list" [attr.aria-label]="'Files to attach (' + attachments().length + ')'">
+  <ul class="attach-list" [attr.aria-label]="'Files to attach (' + attachments().length + ')'" style="list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px">
    @for (a of attachments(); track a.localId) {
-    <li class="attach-item" [attr.data-state]="a.state">
-     <rs-icon name="paperclip" [size]="14" /><span class="mono attach-name">{{ a.name }}</span><span class="muted small">{{ fileSize(a.size) }}</span>
-     <span class="small" [attr.role]="a.state === 'failed' ? 'alert' : null">{{ a.state === 'uploading' ? 'Uploading…' : a.state === 'ready' ? 'Ready' : a.message }}</span>
-     @if (a.state === 'failed' && retryable(a)) {
-      <button class="btn btn-sm" type="button" (click)="upload(a)">Retry<span class="sr-only"> uploading {{ a.name }}</span></button>
-     }
-     <button class="btn btn-sm btn-ghost" type="button" (click)="remove(a)" [disabled]="a.state === 'uploading'">Remove<span class="sr-only"> {{ a.name }}</span></button>
+    <li class="tags" [attr.data-state]="a.state" style="gap:8px;font-size:var(--fs-xs)">
+     <rs-icon name="paperclip" [size]="12" /><span class="mono">{{ a.name }}</span><span class="meta">{{ fileSize(a.size) }}</span>
+     <span [attr.role]="a.state === 'failed' ? 'alert' : null">{{ a.state === 'uploading' ? 'Uploading…' : a.state === 'ready' ? 'Ready' : a.message }}</span>
+     @if (a.state === 'failed' && retryable(a)) { <button class="chipbtn" type="button" (click)="upload(a)">Retry<span class="sr-only"> uploading {{ a.name }}</span></button> }
+     <button class="chipbtn" type="button" (click)="remove(a)" [disabled]="a.state === 'uploading'">Remove<span class="sr-only"> {{ a.name }}</span></button>
     </li>
    }
   </ul>
  }
- @if (pickError()) { <p class="small" role="alert">{{ pickError() }}</p> }
- <div class="composer-foot">
-  @if (uploadPath()) {
-   <input #fileInput type="file" multiple hidden [attr.accept]="accept" (change)="picked($any($event.target))">
-   <button class="btn btn-sm btn-ghost" type="button" (click)="fileInput.click()" [disabled]="attachments().length >= max">
-    <rs-icon name="paperclip" [size]="14" />Attach files</button>
-  }
-  <span class="muted small grow" [id]="fieldId() + '-hint'">{{ kind() === 'note' ? 'Internal note · not sent to the customer' : 'Reply · sent to the customer' }} · {{ draft().length }}/4000{{ blockReason() ? ' · ' + blockReason() : '' }}</span>
-  <button class="btn btn-primary btn-sm" type="submit" [disabled]="!canSend()"><rs-icon name="send" [size]="14" />{{ kind() === 'note' ? 'Add note' : 'Send reply' }}</button>
+ @if (pickError()) { <p class="small" role="alert" style="margin:6px 0 0">{{ pickError() }}</p> }
+ <div class="comp-row" style="margin-top:8px">
+  <span class="audit-note" [id]="fieldId() + '-hint'"><rs-icon name="shield" [size]="12" /> {{ kind() === 'reply' ? 'Sends via ' + channel() + ' · logged to ' + refLabel() : 'Not visible to the customer · logged to ' + refLabel() }}{{ blockReason() ? ' · ' + blockReason() : '' }}</span>
+  <span style="flex:1"></span>
+  <button class="btn btn-primary btn-sm" type="submit" [disabled]="!canSend()"><rs-icon name="send" [size]="14" />{{ kind() === 'note' ? 'Add note' : 'Send' }}</button>
  </div>
 </form>`,
 })
@@ -83,6 +83,11 @@ export class ComposerComponent {
  readonly canReply = input(true);
  readonly canNote = input(true);
  readonly fieldId = input('composer');
+ /** Prototype labels: "Reply to {first name}", "Sends via chat · logged to {ref}". */
+ readonly customerName = input<string | null>(null);
+ readonly channel = input<'chat' | 'email'>('chat');
+ readonly refLabel = input('this item');
+ firstName() { return this.customerName()?.split(/\s+/)[0] || 'customer'; }
  readonly pending = input<PendingMessage[]>([]);
  readonly initialDraft = input('');
  /** Upload endpoint and target; without them the composer offers no attachments. */
@@ -173,6 +178,8 @@ export class ComposerComponent {
  remove(a: Attachment) { this.attachments.update(list => list.filter(x => x.localId !== a.localId)); }
  private patch(localId: string, change: Partial<Attachment>) { this.attachments.update(list => list.map(x => x.localId === localId ? { ...x, ...change } : x)); }
 
+ /** ⌘/Ctrl+Enter sends (prototype). */
+ onKeydown(e: KeyboardEvent) { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) this.submit(e); }
  submit(event: Event) {
   event.preventDefault();
   if (!this.canSend()) return;

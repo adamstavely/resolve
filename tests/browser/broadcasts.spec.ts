@@ -106,14 +106,55 @@ test('repeated publishes and a lost response produce one tenant announcement; th
  await page.context().close();
 });
 
-test('observers and agents cannot publish, and the API refuses them', async ({ browser }) => {
- for (const name of ['Olive Observer', 'Sam Agent']) {
-  const page = await signedIn(browser, name);
-  await expect(page.getByRole('link', { name: 'Announcements' })).toHaveCount(0);
-  expect((await page.request.post('/api/broadcasts', { headers: H, data: { content: content('Nope'), targeting: { mode: 'all' } } })).status()).toBe(403);
-  expect((await page.request.get('/api/broadcasts')).status()).toBe(403);
-  await page.context().close();
+test('observers cannot publish, and the API refuses them', async ({ browser }) => {
+ const page = await signedIn(browser, 'Olive Observer');
+ await expect(page.getByRole('link', { name: 'Announcements' })).toHaveCount(0);
+ expect((await page.request.post('/api/broadcasts', { headers: H, data: { content: content('Nope'), targeting: { mode: 'all' } } })).status()).toBe(403);
+ expect((await page.request.get('/api/broadcasts')).status()).toBe(403);
+ await page.context().close();
+});
+
+test('an agent with Tier 1 or higher in an application can banner that application only (owner decision)', async ({ browser }) => {
+ // Sam holds T2 in Payroll and T1 in HR (as each application reports); suspended Facilities reports no tier.
+ const sam = await signedIn(browser, 'Sam Agent');
+ for (const app of ['payroll', 'hr']) {
+  await sam.goto(`/api/connect/${app}/start`);
+  await expect(sam.getByText(/^Connected to /)).toBeVisible();
  }
+ const post = (targeting: unknown) => sam.request.post('/api/broadcasts', { headers: H, data: { content: content(unique('Tier banner')), targeting } });
+ const all = await post({ mode: 'all' });
+ expect(all.status()).toBe(403);
+ expect((await all.json()).error.code).toBe('TIER_SCOPE');
+ const outside = await post({ mode: 'selected', apps: ['payroll', 'facilities'] });
+ expect(outside.status()).toBe(403);
+ expect((await outside.json()).error.message).toContain('Facilities');
+
+ // The application's workspace offers "Create banner": a modal for that application only, without leaving the workspace.
+ await sam.goto('/apps/payroll');
+ await sam.getByRole('complementary', { name: /tools$/ }).getByRole('button', { name: 'Create banner' }).click();
+ const dialog = sam.getByRole('dialog', { name: 'New banner for Payroll' });
+ await expect(dialog.getByLabel('Title')).toBeFocused();
+ const title = unique('Payroll payslips delayed');
+ await dialog.getByLabel('Title').fill(title);
+ await dialog.getByLabel('Message').fill('Payslips arrive by noon.');
+ await dialog.getByRole('button', { name: 'Review' }).click();
+ await expect(dialog).toContainText('Ready to receive it');
+ expect((await new AxeBuilder({ page: sam }).withTags(tags).include('[role=dialog]').analyze()).violations).toEqual([]);
+ await dialog.getByRole('button', { name: 'Publish banner' }).click();
+ // Once published, the dialog is titled with the banner.
+ const done = sam.getByRole('dialog', { name: title });
+ await expect(done.getByRole('status')).toContainText('Published', { timeout: 20_000 });
+ await expect(done.getByRole('status')).toContainText(/Payroll\s*succeeded/);
+ await expect(sam).toHaveURL(/\/apps\/payroll$/);
+ expect((await announcements('payroll')).find(a => a.title === title)).toMatchObject({ author: 'Sam Agent' });
+ await done.getByRole('button', { name: 'Done' }).click();
+ await expect(done).toBeHidden();
+ await expect(sam.getByRole('complementary', { name: /tools$/ }).getByRole('button', { name: 'Create banner' })).toBeFocused();
+ // Published as Sam, to Payroll only; Sam's list shows only Sam's banners.
+ const list = (await (await sam.request.get('/api/broadcasts')).json()).broadcasts as { author: string }[];
+ expect(list.length).toBeGreaterThan(0);
+ expect(list.every(b => b.author === 'Sam Agent')).toBe(true);
+ await sam.context().close();
 });
 
 test('a scheduled All-apps banner includes an app registered before its publish time', async ({ browser }) => {

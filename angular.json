@@ -16,7 +16,8 @@
             "tsConfig": "apps/console/tsconfig.app.json",
             "index": "apps/console/src/index.html",
             "styles": [
-              "apps/console/src/styles.css"
+              "apps/console/src/styles.css",
+              "apps/console/src/prototype.css"
             ],
             "outputPath": "dist/console",
             "assets": [

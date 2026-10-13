@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { broadcastReviewSchema, broadcastViewSchema, type BroadcastReview, type BroadcastView, type DeliveryView } from '../../../../../packages/contracts/src/index';
 import { IconComponent } from '../icon.component';
 import { RESOLVE_ELEMENTS, ResolveConfirmDialog } from '../elements';
+import { ClearanceService } from '../ui';
 import { api, AppState, focusField, fullTime, send } from '../state';
 import { STATUS_LABEL, STATUS_TONE } from './broadcasts.page';
 
@@ -65,14 +66,16 @@ const toLocal = (iso: string | null) => { if (!iso) return ''; const d = new Dat
      @if (!published()) {
       <fieldset class="radio-set" name="targeting" tabindex="-1">
        <legend>Send to</legend>
-       <label><input type="radio" name="mode" value="all" [checked]="mode() === 'all'" (change)="mode.set('all')">All registered apps</label>
-       <label><input type="radio" name="mode" value="selected" [checked]="mode() === 'selected'" (change)="mode.set('selected')">Selected apps</label>
+       @if (!tierOnly()) {
+        <label><input type="radio" name="mode" value="all" [checked]="mode() === 'all'" (change)="mode.set('all')">All registered apps</label>
+        <label><input type="radio" name="mode" value="selected" [checked]="mode() === 'selected'" (change)="mode.set('selected')">Selected apps</label>
+       } @else { <p class="small muted">You can send banners to the applications where you hold Tier 1 or higher.</p> }
        @if (mode() === 'selected') {
         <ul class="app-checklist" aria-label="Applications">
-         @for (a of state.apps()?.apps ?? []; track a.appKey) {
+         @for (a of choosable(); track a.appKey) {
           <li><label class="check"><input type="checkbox" [checked]="selected().includes(a.appKey)" (change)="toggleApp(a.appKey, $any($event.target).checked)">{{ a.displayName }}
            <span class="muted small">{{ !a.servable ? (a.state === 'suspended' ? 'suspended' : 'not open') : a.connection.state === 'connected' ? 'connected' : 'not connected' }}</span></label></li>
-         }
+         } @empty { <li class="small muted">{{ tierOnly() ? 'No application reports Tier 1 or higher for you.' : 'No applications.' }}</li> }
         </ul>
        }
        @if (fieldError('targeting.apps')) { <p class="field-error">{{ fieldError('targeting.apps') }}</p> }
@@ -171,6 +174,8 @@ const toLocal = (iso: string | null) => { if (!iso) return ''; const d = new Dat
 })
 export class BroadcastPage {
  readonly id = input<string>();
+ /** Query parameter from an application's "Create banner" tool (bound by the router). */
+ readonly app = input<string>();
  readonly state = inject(AppState);
  private readonly location = inject(Location);
  readonly kinds = KINDS;
@@ -195,6 +200,11 @@ export class BroadcastPage {
  readonly portal = signal(true);
  readonly embed = signal(true);
  readonly mode = signal<'all' | 'selected'>('all');
+ private readonly clearance = inject(ClearanceService);
+ canAuthor() { return this.state.can('broadcast.publish') || this.state.can('broadcast.app'); }
+ /** Tier-scoped authors (owner decision 2026-10-12): banners only to applications where they hold Tier 1 or higher. */
+ readonly tierOnly = computed(() => !this.state.can('broadcast.publish') && this.state.can('broadcast.app'));
+ readonly choosable = computed(() => (this.state.apps()?.apps ?? []).filter(a => !this.tierOnly() || !!this.clearance.tierOf(a.appKey)));
  readonly selected = signal<string[]>([]);
  readonly publishAt = signal('');
  readonly expiresAt = signal('');
@@ -209,8 +219,15 @@ export class BroadcastPage {
  constructor() {
   effect(() => {
    const id = this.id();
-   if (!this.state.can('broadcast.publish')) return;
-   untracked(() => { if (id) this.load(id, true); else this.focusHeading(); });
+   if (!this.canAuthor()) return;
+   untracked(() => {
+    if (id) { this.load(id, true); return; }
+    // From an application's "Create banner" tool: that application, preselected.
+    const app = this.app();
+    if (app) { this.mode.set('selected'); this.selected.set([app]); }
+    else if (this.tierOnly()) this.mode.set('selected');
+    this.focusHeading();
+   });
   });
   inject(DestroyRef).onDestroy(() => clearInterval(this.poll));
  }

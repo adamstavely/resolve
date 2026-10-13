@@ -12,24 +12,27 @@ import { PeoplePage } from './pages/people.page';
 import { PilotPage } from './pages/pilot.page';
 import { ComponentsPage } from './pages/components.page';
 import { HomePage } from './pages/home.page';
-import { InboxPage } from './pages/inbox.page';
 import { IntegrationsPage } from './pages/integrations.page';
 import { MappingPage } from './pages/mapping.page';
-import { TicketDetailPage } from './pages/ticket-detail.page';
-import { TicketsPage } from './pages/tickets.page';
+import { CasePage } from './pages/case.page';
+import { InboxPage } from './pages/inbox.page';
+import { EscalationsPage } from './pages/escalations.page';
+import { MyTicketsPage } from './pages/my-tickets.page';
 
 export const routes: Routes = [
  { path: '', component: HomePage, title: 'Resolve' },
+ // Inbox lists chats and My tickets lists tickets (plan 16); both open in the case workspace.
  { path: 'inbox', component: InboxPage, title: 'Inbox · Resolve' },
- { path: 'inbox/:app/:id', component: InboxPage, title: 'Inbox · Resolve' },
+ { path: 'inbox/:app/:id', component: CasePage, data: { kind: 'conversation' }, title: 'Chat · Resolve' },
+ { path: 'tickets', component: MyTicketsPage, title: 'My tickets · Resolve' },
+ { path: 'tickets/:app/:id', component: CasePage, data: { kind: 'ticket' }, title: 'Ticket · Resolve' },
  // The conversations list and page were merged into the inbox.
- { path: 'conversations', redirectTo: 'inbox' },
+ { path: 'conversations', redirectTo: 'inbox', pathMatch: 'full' },
  { path: 'conversations/:app/:id', redirectTo: 'inbox/:app/:id' },
  { path: 'apps/:appKey', component: AppPage, title: 'Application · Resolve' },
  { path: 'evidence/:id', component: EvidencePage, title: 'Evidence snapshot · Resolve' },
  { path: 'receipts/:operationId', component: ReceiptPage, title: 'Receipt · Resolve' },
- { path: 'tickets', component: TicketsPage, title: 'Tickets · Resolve' },
- { path: 'tickets/:app/:id', component: TicketDetailPage, title: 'Ticket · Resolve' },
+ { path: 'escalations', component: EscalationsPage, title: 'Escalations · Resolve' },
  { path: 'audit', component: AuditPage, title: 'Audit · Resolve' },
  { path: 'applications', component: ApplicationsPage, title: 'Applications · Resolve' },
  { path: 'applications/onboarding/new', component: OnboardingPage, title: 'Register an application · Resolve' },

@@ -11,7 +11,7 @@ async function signedIn(browser: Browser, name: string) {
  const ctx = await browser.newContext({ baseURL: 'http://127.0.0.1:4200' });
  const page = await ctx.newPage();
  await signInAs(page, name);
- await expect(page.getByText(`Signed in as ${name}`)).toBeVisible();
+ await expect(page.getByRole('button', { name: `${name}, account and availability` })).toBeVisible();
  return page;
 }
 const whoami = async (page: Page, app: string) => (await page.request.get(`/api/apps/${app}/whoami`)).json();
@@ -48,7 +48,8 @@ test('one human connects two apps through SSO; each tenant knows them under its 
  await page.getByRole('link', { name: 'Connect to HR Platform' }).click();
  await expect(notice(page)).toHaveText('Connected to HR Platform.');
  const [payroll, hr] = [await whoami(page, 'payroll'), await whoami(page, 'hr')];
- expect(payroll.scopes).toEqual(['openid', 'offline_access', 'read:chat', 'write:chat']);
+ // Agents may banner applications where they hold Tier 1+ (owner decision 2026-10-12), so they get announcement scopes too.
+ expect(payroll.scopes).toEqual(['openid', 'offline_access', 'read:announcement', 'read:chat', 'write:announcement', 'write:chat']);
  expect(hr.app).toBe('hr');
  expect(payroll.tenantUserId).not.toBe(hr.tenantUserId);
  await page.goto('/apps/payroll');
@@ -99,11 +100,11 @@ test('a tenant account belonging to a different IdP identity is refused', async 
  const ctx = await browser.newContext({ baseURL: 'http://127.0.0.1:4200' });
  const page = await ctx.newPage();
  await signInAs(page, 'Olive Observer');
- await expect(page.getByText('Signed in as Olive Observer')).toBeVisible();
+ await expect(page.getByRole('button', { name: 'Olive Observer, account and availability' })).toBeVisible();
  const oliveIdp = (await ctx.cookies(IDP)).find(c => c.name === 'mock_idp_session')!;
  await ctx.clearCookies();
  await signInAs(page, 'Sam Duplicate');
- await expect(page.getByText('Signed in as Sam Duplicate')).toBeVisible();
+ await expect(page.getByRole('button', { name: 'Sam Duplicate, account and availability' })).toBeVisible();
  await disconnect(page, 'payroll');
  // The browser's IdP session is now Olive's while Resolve's session is Sam Duplicate's.
  await ctx.addCookies([oliveIdp]);

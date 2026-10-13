@@ -16,7 +16,7 @@ export async function signedIn(browser: Browser, name: string, connect: string[]
  const ctx = await browser.newContext({ baseURL: ORIGIN });
  const page = await ctx.newPage();
  await signInAs(page, name);
- await expect(page.getByText(`Signed in as ${name}`)).toBeVisible();
+ await expect(page.getByRole('button', { name: `${name}, account and availability` })).toBeVisible();
  for (const app of connect) {
   await page.goto(`/api/connect/${app}/start`);
   await expect(page.locator('p.notice')).toContainText('Connected to');
@@ -62,4 +62,12 @@ async function findTicket(p: Page, customer: number, status: string) {
   cursor = r.nextCursor; if (!cursor) break;
  }
  throw new Error(`no ${status} ticket for customer ${customer}`);
+}
+
+/** Capture an evidence snapshot from the case rail (prototype v2 tool drawer) and open it. */
+export async function captureSnapshot(page: Page) {
+ await page.getByRole('complementary', { name: /tools$/ }).getByRole('button', { name: 'Capture evidence snapshot' }).click();
+ const drawer = page.getByRole('dialog', { name: 'Capture evidence snapshot' });
+ await drawer.getByRole('button', { name: 'Capture snapshot' }).click();
+ await drawer.getByRole('link', { name: 'View the snapshot' }).click();
 }

@@ -1,9 +1,12 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { z } from 'zod';
-import { BUNDLE_LABELS, CAPABILITIES, clearanceResponseSchema, dashboardResponseSchema, type CapabilityId, type DashboardResponse, type KpiMetric } from '../../../../../packages/contracts/src/index';
+import { BUNDLE_LABELS, CAPABILITIES, dashboardResponseSchema, type CapabilityId, type DashboardResponse, type KpiMetric } from '../../../../../packages/contracts/src/index';
 import { IconComponent, MarkComponent } from '../icon.component';
-import { KnownIssuesComponent, LiveActivityComponent } from './service-health.component';
+import { LiveActivityComponent } from './service-health.component';
+import { KnownIssuesComponent } from './issues.component';
+import { ClearanceService, TierBadgeComponent } from '../ui';
+import { WorkService } from '../work.service';
 import { HEALTH_ICON, HEALTH_LABEL, HEALTH_TONE, ObservabilityService, REASON_TEXT } from '../observability.service';
 import type { AppHealth, ElasticFamily } from '../../../../../packages/contracts/src/index';
 import { api, AppState, fullTime, relativeTime } from '../state';
@@ -46,163 +49,122 @@ function connectMessage(result: string | null, app: string) {
 
 @Component({
  selector: 'rs-home-page',
- imports: [IconComponent, MarkComponent, RouterLink, KnownIssuesComponent, LiveActivityComponent],
+ imports: [IconComponent, MarkComponent, RouterLink, KnownIssuesComponent, LiveActivityComponent, TierBadgeComponent],
  template: `
 <div class="launchpad">
- @if (message(); as m) { <p class="notice" [attr.data-tone]="m.alert ? 'destructive' : 'safe'" [attr.role]="m.alert ? 'alert' : 'status'">{{ m.text }}</p> }
-
+ @if (message(); as m) { <p class="notice" [attr.data-tone]="m.alert ? 'destructive' : 'safe'" [attr.role]="m.alert ? 'alert' : 'status'" style="margin-bottom:18px">{{ m.text }}</p> }
  @if (pendingPilots().length) {
-  <section class="card pad pilot-card" aria-labelledby="pilot-title">
-   <h2 class="card-title" id="pilot-title"><rs-icon name="shieldCheck" [size]="15" />Pilot checks</h2>
-   <ul class="caps">
-    @for (p of pendingPilots(); track p.runId) {
-     <li><span>You are a pilot for {{ p.applicationName }} ({{ p.environment }}). <a [routerLink]="['/onboarding', p.runId, 'pilot']">Run the pilot check<span class="sr-only"> for {{ p.applicationName }}</span></a></span></li>
-    }
-   </ul>
+  <section class="panel" aria-labelledby="pilot-title" style="margin-bottom:18px">
+   <div class="ph2"><h2 class="pt2" id="pilot-title"><rs-icon name="shieldCheck" [size]="15" />Pilot checks</h2></div>
+   @for (p of pendingPilots(); track p.runId) {
+    <div class="prow"><span>You are a pilot for {{ p.applicationName }} ({{ p.environment }}). <a [routerLink]="['/onboarding', p.runId, 'pilot']">Run the pilot check<span class="sr-only"> for {{ p.applicationName }}</span></a></span></div>
+   }
   </section>
  }
 
- <section class="lp-hero" aria-labelledby="hero-title">
+ <div class="lp-hero">
   <div class="lp-mark" aria-hidden="true"><rs-mark size="100%" variant="hero" /></div>
-  <div>
-   <h1 class="lp-title" id="hero-title" tabindex="-1">Resolve: One place to <span class="accent">solve</span> it.</h1>
-   <p class="lp-lede">Chats, tickets, and escalations across every connected application. Sign in once, connect each app as yourself, and act with the access your role allows.</p>
-  </div>
- </section>
-
- @if (state.can('dashboard.view')) {
-  <section aria-labelledby="kpi-title">
-   <div class="section-head">
-    <h2 class="section-label" id="kpi-title">Across your applications</h2>
-    <button class="btn btn-sm btn-ghost" type="button" (click)="loadDashboard()" [disabled]="loading()"><rs-icon name="refresh" [size]="14" />Refresh</button>
-   </div>
-   @if (dashError()) { <p class="notice" data-tone="destructive" role="alert">{{ dashError() }}</p> }
-   <ul class="kpi-grid">
-    @for (k of kpis; track k.key) {
-     <li class="kpi" [attr.aria-busy]="loading() || null">
-      <span class="kpi-label">{{ k.label }}</span>
-      @if (dashboard(); as d) {
-       @if (d.totals[k.key].value !== null) { <span class="kpi-value mono">{{ d.totals[k.key].value }}</span> }
-       @else { <span class="kpi-value mono muted" aria-label="Unavailable">—</span> }
-       <span class="kpi-cover">{{ coverage(d, k.key) }}</span>
-      } @else { <span class="kpi-value mono muted">…</span><span class="kpi-cover">{{ k.hint }}</span> }
-     </li>
-    }
-   </ul>
-   @if (dormantApps().length) {
-    <div class="row dormant-row">
-     @for (a of dormantApps(); track a.appKey) {
-      <button class="btn btn-sm" type="button" (click)="wake(a.appKey)">Load {{ a.displayName }}</button>
-     }
-     <span class="muted small">Idle applications are not counted until you load them. Loading starts the application.</span>
-    </div>
+  <div class="lp-hero-text">
+   @if (state.user(); as u) {
+    <h1 class="lp-title" tabindex="-1">{{ greeting() }}, <span class="accent">{{ firstName() }}</span>.</h1>
+    <p class="lp-lede">{{ lede() }}</p>
+   } @else {
+    <h1 class="lp-title" tabindex="-1">Resolve: One place to <span class="accent">solve</span> it.</h1>
+    <p class="lp-lede">Chats, tickets, and escalations across every connected application. Sign in once, connect each app as yourself, and act with the access your role allows.</p>
    }
+  </div>
+ </div>
+
+ @if (state.apps(); as list) {
+  <div class="lp-cols">
+   <section aria-labelledby="apps-title">
+    <h2 class="section-label" id="apps-title" style="margin:0 0 12px">Your applications{{ healthOn() ? ' · live health' : '' }}</h2>
+    <div class="app-grid stagger">
+     @for (a of list.apps; track a.appKey) {
+      <article class="app-card" [id]="'app-' + a.appKey" [attr.aria-labelledby]="'app-name-' + a.appKey">
+       <div class="app-card-top">
+        <span class="app-glyph" style="width:38px;height:38px;font-size:17px" aria-hidden="true">{{ a.displayName.charAt(0) }}</span>
+        <div style="flex:1;min-width:0">
+         <h3 class="app-card-name" style="margin:0"><a class="card-link" [id]="'app-name-' + a.appKey" [routerLink]="['/apps', a.appKey]">{{ a.displayName }}</a></h3>
+         <div class="app-card-tag">{{ a.description || a.appKey }}</div>
+        </div>
+        @if (healthOn() && healthOf(a.appKey); as h) {
+         <span class="app-stat" style="font-weight:560;color:var(--ink-2)"><span class="status-dot" [attr.data-tone]="healthTone[h.state]" aria-hidden="true"></span> {{ healthLabel[h.state] }}</span>
+        } @else if (!healthOn()) {
+         <span class="app-stat" style="font-weight:560;color:var(--ink-2)"><span class="status-dot" [attr.data-tone]="statusTone(a)" aria-hidden="true"></span> {{ statusLabel(a) }}</span>
+        }
+       </div>
+       @if (healthOn()) {
+        @if (issueFor(a.appKey); as i) { <div class="app-issue">{{ i.title }}</div> }
+        <div style="border-top:1px solid var(--border);padding-top:6px">
+         @if (healthOf(a.appKey); as h) {
+          @if (h.reason) { <div class="hrow"><span class="k">{{ reasonText(h.reason) }}</span></div> }
+          @else {
+           <div class="hrow"><span class="k">SLO</span><span class="mono">{{ sloLine(h) }}</span></div>
+           <div class="hrow"><span class="k">Active alerts</span><span class="mono">{{ h.summary.activeAlerts }}</span></div>
+           <div class="hrow"><span class="k">Synthetics</span>
+            @if (h.summary.synthetics.recent.length) {
+             <span style="display:flex;align-items:center;gap:8px"><span class="ticks" aria-hidden="true">@for (r of h.summary.synthetics.recent; track $index) { <i [class.f]="r.status === 'down'"></i> }</span>
+              <span class="mono">{{ passed(h) }}/{{ h.summary.synthetics.recent.length }}</span>
+              <span class="sr-only">: {{ passed(h) }} of the last {{ h.summary.synthetics.recent.length }} runs passed{{ h.summary.synthetics.failing.length ? '; failing now: ' + h.summary.synthetics.failing.join(', ') : '' }}</span></span>
+            } @else { <span class="mono">{{ h.summary.synthetics.configured ? 'No recent results' : 'Not configured' }}</span> }
+           </div>
+          }
+         } @else { <div class="hrow"><span class="k">{{ obs.loaded() ? 'No health for this application' : 'Loading…' }}</span></div> }
+        </div>
+       } @else {
+        <div style="border-top:1px solid var(--border);padding-top:6px">
+         <div class="hrow"><span class="k">Your connection</span><span>{{ connectionLabel(a.connection.state) }}</span></div>
+        </div>
+       }
+       <div class="divider"></div>
+       <div class="app-card-foot">
+        <span class="tier-line">Your clearance <rs-tier [tier]="clearance.tierOf(a.appKey)" size="sm" /></span>
+        @if (openTickets(a.appKey); as n) { <span class="app-stat"><b>{{ n.value }}</b> open tickets</span> }
+        @else if (!a.servable) { <span class="app-stat">Unavailable</span> }
+       </div>
+      </article>
+     }
+    </div>
+    @if (healthOn()) {
+     <div class="meta" style="margin-top:10px">Health from Elastic SLOs, alerting rules and Synthetics@if (refreshedAt(); as t) { · refreshed <time [attr.datetime]="t" [attr.title]="fullTime(t)">{{ relativeTime(t) }}</time>}</div>
+    }
+    <p role="status" class="small muted">{{ state.appsError() }}</p>
+   </section>
+
+   <div class="side-stack">
+    @if (state.can('ticket.read')) {
+     <section class="panel" aria-labelledby="mt-title">
+      <div class="panel-head">
+       <h2 class="t" id="mt-title" style="margin:0"><rs-icon name="ticket" [size]="15" /> My tickets</h2>
+       <a class="btn btn-ghost btn-sm" routerLink="/tickets">View all</a>
+      </div>
+      <div class="panel-body">
+       @for (c of myItems(); track c.kind + c.appKey + c.id) {
+        <a class="esc-row" style="width:100%;color:var(--ink)" [routerLink]="[c.kind === 'ticket' ? '/tickets' : '/inbox', c.appKey, c.id]">
+         <span class="ch-ic" style="width:28px;height:28px" aria-hidden="true"><rs-icon [name]="c.channel === 'chat' ? 'chat' : 'mail'" [size]="14" />@if (c.channel === 'chat') { <span class="live"></span> }</span>
+         <div style="flex:1;min-width:0">
+          <div style="font-size:var(--fs-sm);font-weight:500">{{ c.subject }}</div>
+          <div class="feed-line2"><span>{{ c.ref }}</span><span>·</span><span>{{ state.appName(c.appKey) }}</span></div>
+         </div>
+         @if (c.waitingSince) { <span class="waiting">{{ waited(c.waitingSince) }}</span> }
+        </a>
+       } @empty { <p class="feed-line2" style="padding:10px">{{ work.ticketsLoading() ? 'Loading…' : 'Nothing assigned to you.' }}</p> }
+      </div>
+     </section>
+    }
+    @if (state.can('observability.health')) { <rs-known-issues /><rs-live-activity /> }
+   </div>
+  </div>
+ } @else if (state.session()?.authenticated === false) {
+  <section class="panel" aria-labelledby="signin-title" style="max-width:560px">
+   <div class="ph2"><h2 class="pt2" id="signin-title">Sign in to continue</h2></div>
+   <div class="prow" style="flex-direction:column;align-items:flex-start">
+    <p class="muted" style="margin:0">Use your organization account. Resolve then shows the applications and actions your role allows.</p>
+    <a class="btn btn-primary" href="/api/auth/login?returnTo=/">Sign in</a>
+   </div>
   </section>
  }
-
- <div class="lp-cols">
-  <div class="stack-lg">
-   @if (state.apps(); as list) {
-    <section aria-labelledby="apps-title">
-     <div class="section-head"><h2 class="section-label" id="apps-title">Your applications{{ healthOn() ? ' · live health' : '' }}</h2></div>
-     @if (!healthOn()) { <p class="muted small">Open an application to connect to it. Resolve then acts as you there, with only the access your role needs.</p> }
-     <div class="app-grid" [class.health-grid]="healthOn()">
-      @for (a of list.apps; track a.appKey) {
-       <article class="app-card" [class.health-card]="healthOn()" [id]="'app-' + a.appKey" [attr.aria-labelledby]="'app-name-' + a.appKey" [attr.data-unavailable]="!a.servable || null">
-        <div class="app-card-top">
-         <span class="app-glyph lg" aria-hidden="true">{{ a.displayName.charAt(0) }}</span>
-         <div class="grow">
-          <h3 class="app-card-name"><a class="card-link" [id]="'app-name-' + a.appKey" [routerLink]="['/apps', a.appKey]">{{ a.displayName }}</a></h3>
-          <p class="app-card-tag">{{ a.description || a.appKey }}</p>
-         </div>
-         @if (healthOn()) {
-          @if (healthOf(a.appKey); as h) { <span class="health-status"><span class="status-dot" [attr.data-tone]="healthTone[h.state]" aria-hidden="true"></span>{{ healthLabel[h.state] }}</span> }
-         }
-        </div>
-        @if (healthOn()) {
-         @if (issueFor(a.appKey); as i) { <div class="hc-issue">{{ i.title }}</div> }
-         <div class="hc-rows">
-          @if (healthOf(a.appKey); as h) {
-           @if (h.reason) { <p class="hc-reason">{{ reasonText(h.reason) }}</p> }
-           @else {
-            <div class="hrow"><span class="k">SLO</span><span class="mono">{{ sloLine(h) }}</span></div>
-            <div class="hrow"><span class="k">Active alerts</span><span class="mono">{{ h.summary.activeAlerts }}</span></div>
-            <div class="hrow"><span class="k">Synthetics</span>
-             @if (h.summary.synthetics.recent.length) {
-              <span class="hrow-v"><span class="ticks" aria-hidden="true">@for (r of h.summary.synthetics.recent; track $index) { <i [attr.data-down]="r.status === 'down' || null"></i> }</span>
-               <span class="mono">{{ passed(h) }}/{{ h.summary.synthetics.recent.length }}</span>
-               <span class="sr-only">: {{ passed(h) }} of the last {{ h.summary.synthetics.recent.length }} runs passed{{ h.summary.synthetics.failing.length ? '; failing now: ' + h.summary.synthetics.failing.join(', ') : '' }}</span></span>
-             } @else { <span class="mono">{{ h.summary.synthetics.configured ? 'No recent results' : 'Not configured' }}</span> }
-            </div>
-           }
-          }
-         </div>
-         <div class="hc-foot">
-          <span>Your clearance @if (clearanceOf(a.appKey) !== '—') { <b class="mono">{{ clearanceOf(a.appKey) }}</b> } @else { <b class="mono" aria-hidden="true">—</b><span class="sr-only">not reported</span> }</span>
-          @if (openTickets(a.appKey); as n) { <span><b class="mono">{{ n.value }}</b> open tickets</span> }
-          @else if (!a.servable) { <span>Unavailable ({{ a.state }})</span> }
-         </div>
-        } @else {
-         <dl class="app-card-meta">
-          <div><dt>Status</dt><dd><span class="status-dot" [attr.data-tone]="statusTone(a)" aria-hidden="true"></span>{{ statusLabel(a) }}</dd></div>
-          <div><dt>Your connection</dt><dd>{{ connectionLabel(a.connection.state) }}</dd></div>
-         </dl>
-        }
-       </article>
-      }
-     </div>
-     @if (healthOn()) {
-      <p class="hc-source mono">Health from Elastic SLOs, alerting rules and Synthetics@if (refreshedAt(); as t) { · refreshed <time [attr.datetime]="t" [attr.title]="fullTime(t)">{{ relativeTime(t) }}</time>}</p>
-     }
-     <p role="status" class="small muted status-line">{{ state.appsError() }}</p>
-    </section>
-   } @else if (state.session()?.authenticated === false) {
-    <section class="card pad" aria-labelledby="signin-title">
-     <h2 class="card-title" id="signin-title">Sign in to continue</h2>
-     <p class="muted">Use your organization account. Resolve then shows the applications and actions your role allows.</p>
-     <a class="btn btn-primary" href="/api/auth/login?returnTo=/">Sign in</a>
-    </section>
-   }
-  </div>
-
-  <aside class="stack-lg" aria-label="Activity and access">
-   @if (state.can('observability.health')) { <rs-known-issues /><rs-live-activity /> }
-   @if (state.can('dashboard.view')) {
-    <section class="card" aria-labelledby="activity-title">
-     <div class="card-head"><h2 class="card-title" id="activity-title"><rs-icon name="activity" [size]="15" />Recent activity</h2><span class="card-meta">Latest per app</span></div>
-     @if (dashboard(); as d) {
-      <ol class="feed">
-       @for (e of d.activity.slice(0, 12); track e.id) {
-        <li>
-         <span class="feed-dot" [attr.data-kind]="e.kind" aria-hidden="true"></span>
-         <div class="grow">
-          <a class="feed-title" [routerLink]="['/', e.itemType === 'ticket' ? 'tickets' : 'inbox', e.appKey, e.itemId]">{{ e.title }}</a>
-          <p class="feed-meta mono">{{ activityLabel(e.kind) }} · {{ state.appName(e.appKey) }}@if (e.actorName) { · {{ e.actorName }} } · <time [attr.datetime]="e.at" [attr.title]="fullTime(e.at)">{{ relativeTime(e.at) }}</time></p>
-         </div>
-        </li>
-       } @empty { <li class="muted small">No recent activity from connected applications.</li> }
-      </ol>
-     } @else { <p class="pad muted small">Loading…</p> }
-    </section>
-   }
-   <section class="card" aria-labelledby="access-title">
-    <div class="card-head"><h2 class="card-title" id="access-title"><rs-icon name="user" [size]="15" />Your access</h2></div>
-    <div class="pad">
-     @if (state.session(); as s) {
-      @if (s.authenticated) {
-       <p class="who">Signed in as {{ s.user.displayName }}{{ s.user.email ? ' (' + s.user.email + ')' : '' }}.
-        Roles: {{ roleLabels() || 'none. Ask an administrator for access.' }}</p>
-       @if (s.capabilities.length) {
-        <details class="caps-details"><summary>What you can do ({{ s.capabilities.length }})</summary>
-         <ul class="caps">@for (c of s.capabilities; track c) { <li><rs-icon name="check" [size]="14" />{{ capabilitySummary(c) }}</li> }</ul>
-        </details>
-       }
-      } @else { <p class="muted">You are signed out. Sign in with your organization account to see your access.</p> }
-     } @else { <p class="muted">Checking sign-in…</p> }
-    </div>
-   </section>
-  </aside>
- </div>
 </div>`,
 })
 export class HomePage {
@@ -233,9 +195,20 @@ export class HomePage {
   const m = r?.status === 'ok' ? r.data.metrics.openTickets : null;
   return m && m.status === 'available' ? { value: m.value } : null;
  }
- /** Your tier per app as each application reports it (QB-TIER-1); "—" when it reports none or cannot be asked. */
- readonly clearance = signal<Record<string, 1 | 2 | 3 | null>>({});
- clearanceOf(appKey: string) { const t = this.clearance()[appKey]; return t ? `T${t}` : '—'; }
+ /** Your tier per app as each application reports it (QB-TIER-1). */
+ readonly clearance = inject(ClearanceService);
+ readonly work = inject(WorkService);
+ readonly myItems = computed(() => this.work.items().filter(i => i.assigneeName === this.state.user()?.displayName).slice(0, 3));
+ readonly firstName = computed(() => this.state.user()?.displayName.split(/\s+/)[0] ?? '');
+ greeting() { const h = new Date().getHours(); return h < 5 ? 'Still on shift' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; }
+ lede() {
+  if (!this.healthOn()) return 'Chats and tickets across every connected application, with the access your role allows.';
+  const n = this.obs.issues().length;
+  const words = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
+  if (!n) return 'No known issues are live right now.';
+  return `${n === 1 ? 'One known issue is' : `${words[n] ?? n} known issues are`} live right now. If a customer's problem matches one, link it instead of escalating.`;
+ }
+ waited(since: string) { const m = Math.max(0, Math.round((Date.now() - Date.parse(since)) / 60000)); return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`; }
  /** The oldest refresh among apps with current health, so "refreshed" never overstates freshness. */
  readonly refreshedAt = computed(() => this.obs.health().map(h => h.provenance?.fetchedAt).filter((t): t is string => !!t).sort()[0] ?? null);
  readonly kpis = KPIS;
@@ -256,8 +229,6 @@ export class HomePage {
   // Load once the session (which may still be in flight) grants the dashboard.
   let started = false;
   effect(() => { if (!started && this.state.can('dashboard.view')) { started = true; untracked(() => this.loadDashboard()); } });
-  let tiers = false;
-  effect(() => { if (!tiers && this.state.can('ticket.read')) { tiers = true; untracked(() => api('/api/clearance', clearanceResponseSchema).then(r => this.clearance.set(Object.fromEntries(r.apps.map(a => [a.appKey, a.tier])))).catch(() => {})); } });
   let pilots = false;
   effect(() => { if (!pilots && this.state.can('connection.manage')) { pilots = true; untracked(() => api('/api/onboarding/pilot-runs', pilotRunsSchema).then(r => this.pilotRuns.set(r.runs)).catch(() => {})); } });
  }
